@@ -5,6 +5,7 @@ import astor
 from collections import OrderedDict
 
 from tree import *
+from grammar import *
 
 p_elif = re.compile(r'^elif\s?')
 p_else = re.compile(r'^else\s?')
@@ -12,16 +13,6 @@ p_try = re.compile(r'^try\s?')
 p_except = re.compile(r'^except\s?')
 p_finally = re.compile(r'^finally\s?')
 p_decorator = re.compile(r'^@.*')
-
-
-ast_classes = dict()
-
-# get all ast classes
-for name, obj in inspect.getmembers(sys.modules['ast']):
-    if inspect.isclass(obj):
-        name = obj.__name__
-        ast_classes[name] = obj
-
 
 ast_node_black_list = {'ctx'}
 
@@ -520,14 +511,14 @@ ast_class_fields = {
     },
     'Num': {
         'n': {
-            'type': 'object',
+            'type': object,
             'is_list': False,
             'is_optional': False
         }
     },
     'Str': {
         's': {
-            'type': 'string',
+            'type': str,
             'is_list': False,
             'is_optional': False
         }
@@ -648,6 +639,18 @@ ast_class_fields = {
             'is_optional': False
         },
     },
+    'keyword': {
+        'arg': {
+            'type': 'identifier',
+            'is_list': False,
+            'is_optional': False
+        },
+        'value': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': True
+        }
+    },
     'alias': {
         'name': {
             'type': 'identifier',
@@ -660,6 +663,37 @@ ast_class_fields = {
             'is_optional': True
         }
     },
+    'Slice': {
+        'lower': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': True
+        },
+        'upper': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': True
+        },
+        'step': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': True
+        }
+    },
+    'ExtSlice': {
+        'dims': {
+            'type': ast.slice,
+            'is_list': True,
+            'is_optional': False
+        }
+    },
+    'Index': {
+        'value': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': False
+        }
+    }
 }
 
 
@@ -676,93 +710,73 @@ def escape(text):
     return repr(text)[1:-1] if text else '-NONE-'
 
 
+# x is a type
 def typename(x):
-    return type(x).__name__
+    if isinstance(x, str):
+        return x
+    return x.__name__
 
 
-def get_tree_str_repr(node):
-    treeStr = ''
-    if type(node) == list:
-        for n in node:
-            treeStr += get_tree_str_repr(n)
-
-        return treeStr
-
-    node_name = str(type(node))
-    begin = node_name.find('ast.') + len('ast.')
-    end = node_name.rfind('\'')
-    node_name = node_name[begin: end]
-    treeStr = '(' + node_name + ' '
-    for field_name in node._fields:
-        field = getattr(node, field_name)
-        if hasattr(field, '_fields') and len(field._fields) == 0:
-            continue
-        if field:
-            if type(field) == list:
-                fieldRepr = get_tree_str_repr(field)
-                fieldRepr = '(' + field_name + ' ' + fieldRepr + ') '
-            elif type(field) == str or type(field) == int:
-                fieldRepr = '(' + field_name + ' ' + str(field) + ') '
-            else:
-                fieldRepr = get_tree_str_repr(field)
-                fieldRepr = '(' + field_name + ' ' + fieldRepr + ') '
-
-            treeStr += fieldRepr
-    treeStr += ') '
-
-    return treeStr
+def is_builtin_type(x):
+    return x == str or x == int or x == float or x == bool or x == object or x == 'identifier'
 
 
-def get_tree(node):
-
+def ast_to_tree(node):
     if isinstance(node, str):
-        node_name = escape(node)
+        label = escape(node)
+        return Tree(str, label)
     elif isinstance(node, int):
-        node_name = node
-    else:
-        node_name = typename(node)
+        return Tree(int, node)
+    elif isinstance(node, float):
+        return Tree(float, node)
 
-    tree = Tree(node_name)
+    assert isinstance(node, ast.AST)
 
-    if not isinstance(node, ast.AST):
-        return tree
+    node_type = type(node)
+    tree = Tree(node_type)
 
-    for field_name, field in ast.iter_fields(node):
-        # omit empty fields
-        if field is None or (isinstance(field, list) and len(field) == 0):
+    # it's a leaf AST node
+    if len(node._fields) == 0:
+        return Tree(node_type)
+
+    # it's a compositional AST node
+    fields_info = ast_class_fields[node_type.__name__]
+
+    for field_name, field_value in ast.iter_fields(node):
+        # remove ctx stuff
+        if field_name in ast_node_black_list:
             continue
 
-        if isinstance(field, ast.AST):
-            # if len(field._fields) == 0:
-            #     continue
-            if field_name in ast_node_black_list:
-                continue
+        field_type = fields_info[field_name]['type']
+        is_list = fields_info[field_name]['is_list']
+        is_optional = fields_info[field_name]['is_optional']
 
-            child = get_tree(field)
+        # omit empty fields
+        if field_value is None or (is_list and len(field_value) == 0):
+            continue
 
-            tree.children.append(Tree(field_name, child))
-        elif isinstance(field, str):
-            field_val = escape(field)
-            child = Tree(field_name, Tree(field_val))
+        if isinstance(field_value, ast.AST):
+            child = ast_to_tree(field_value)
+            tree.children.append(Tree(field_type, field_name, child))
+        elif isinstance(field_value, str) or isinstance(field_value, int) or isinstance(field_value, float):
+            child = Tree(field_type, field_name, ast_to_tree(field_value))
             tree.children.append(child)
-        elif isinstance(field, int):
-            child = Tree(field_name, Tree(field))
-            tree.children.append(child)
-        elif isinstance(field, float):
-            child = Tree(field_name, Tree(field))
-            tree.children.append(child)
-        elif isinstance(field, list):
-            if len(field) > 0:
-                child = Tree(field_name)
+        elif is_list:
+            if len(field_value) > 0:
+                child = Tree(typename(field_type) + '*', field_name)
                 # list_node = Tree('list')
                 # child.children.append(list_node)
-                for n in field:
-                    # list_node.children.append(get_tree(n))
-                    child.children.append(get_tree(n))
+                for n in field_value:
+                    if field_type in {ast.comprehension, ast.excepthandler, ast.arguments, ast.keyword, ast.alias}:
+                        child.children.append(ast_to_tree(n))
+                    else:
+                        intermediate_node = Tree(field_type)
+                        intermediate_node.children.append(ast_to_tree(n))
+                        child.children.append(intermediate_node)
 
                 tree.children.append(child)
         else:
-            raise RuntimeError('unknown field!')
+            raise RuntimeError('unknown AST node field!')
 
     return tree
 
@@ -770,7 +784,7 @@ def get_tree(node):
 def parse(code):
     root_node = code_to_ast(code)
 
-    tree = get_tree(root_node.body[0])
+    tree = ast_to_tree(root_node.body[0])
 
     return tree
 
@@ -810,8 +824,8 @@ def parse_django(code_file):
         parse_tree = parse(code)
         rule_list = parse_tree.get_rule_list(include_leaf=False)
         parse_trees.append(parse_tree)
-        ast_tree = tree_to_ast(parse_tree)
-        print astor.to_source(ast_tree)
+        # ast_tree = tree_to_ast(parse_tree)
+        # print astor.to_source(ast_tree)
             # print parse_tree
         # except Exception as e:
         #     error_num += 1
@@ -840,74 +854,56 @@ def parse_django(code_file):
 
 
 def tree_to_ast(tree):
-    node_name = tree.name
+    node_type = tree.type
+    node_label = tree.label
 
-    if tree.is_leaf:
-        if node_name in ast_classes and node_name not in {'alias', 'operator'}:
-            ast_node = ast_classes[node_name]()
+    if tree.is_leaf and is_builtin_type(node_type):
+        return node_label
 
-            fields_info = None
-            # init fields to empty
-            if node_name in ast_class_fields:
-                fields_info = ast_class_fields[node_name]
+    else:
+        ast_node = node_type()
+        node_type_name = typename(node_type)
 
-            for field in ast_node._fields:
-                if fields_info and fields_info[field]['is_list'] and not fields_info[field]['is_optional']:
-                    setattr(ast_node, field, list())
+        # it's a compositional AST node
+        if node_type_name in ast_class_fields:
+            fields_info = ast_class_fields[node_type_name]
+
+            for child_node in tree.children:
+                field_type = child_node.type
+                field_label = child_node.label
+                field_entry = ast_class_fields[node_type_name][field_label]
+                is_list = field_entry['is_list']
+
+                if is_list:
+                    field_type = field_entry['type']
+                    field_value = []
+
+                    if field_type in {ast.comprehension, ast.excepthandler, ast.arguments, ast.keyword, ast.alias}:
+                        nodes_in_list = child_node.children
+                        for sub_node in nodes_in_list:
+                            sub_node_ast = tree_to_ast(sub_node)
+                            field_value.append(sub_node_ast)
+                    else:  # expr stuffs
+                        inter_nodes = child_node.children
+                        for inter_node in inter_nodes:
+                            assert len(inter_node.children) == 1
+                            sub_node_ast = tree_to_ast(inter_node.children[0])
+                            field_value.append(sub_node_ast)
                 else:
-                    setattr(ast_node, field, None)
+                    assert len(child_node.children) == 1
+                    sub_node = child_node.children[0]
+                    field_value = tree_to_ast(sub_node)
 
-            return ast_node
+                setattr(ast_node, field_label, field_value)
 
-        return node_name
-    elif node_name in ast_classes:
-        src_class = ast_classes[node_name]
-        tgt_fields = src_class._fields
-
-        # child_nodes = OrderedDict()
-        # for child in tree.children:
-        #     child_name = child.name
-        #     if child not in child_nodes:
-        #         child_nodes[child_name] = child
-        #     else:
-        #         old_child = child_nodes[child_name]
-        #         if isinstance(old_child, list):
-        #             old_child.append(child)
-        #         else:
-        #             child_nodes[child_name] = [old_child, child]
-
-        fields_info = None
-        if node_name in ast_class_fields:
-            fields_info = ast_class_fields[node_name]
-
-        ast_node = src_class()
-        for child_node in tree.children:
-            field = child_node.name
-
-            if fields_info and fields_info[field]['is_list']:
-                field_value = []
-                nodes_in_list = child_node.children
-                for sub_node in nodes_in_list:
-                    sub_node_ast = tree_to_ast(sub_node)
-                    field_value.append(sub_node_ast)
-            else:
-                assert len(child_node.children) == 1
-                sub_node = child_node.children[0]
-                field_value = tree_to_ast(sub_node)
-
-            setattr(ast_node, field, field_value)
-
-        for field in tgt_fields:
-            if not hasattr(ast_node, field):
+        for field in ast_node._fields:
+            if not hasattr(ast_node, field) and not field in ast_node_black_list:
                 if fields_info and fields_info[field]['is_list'] and not fields_info[field]['is_optional']:
                     setattr(ast_node, field, list())
                 else:
                     setattr(ast_node, field, None)
 
         return ast_node
-
-    else:
-        raise RuntimeError('unknown tree node!')
 
 
 if __name__ == '__main__':
@@ -927,15 +923,15 @@ if __name__ == '__main__':
     # print parse('for f in sorted ( os . listdir ( self . path ) ) : sum = sum + 1; sum = "(hello there)" ')
     # print parse('global _standard_context_processors')
 
-    parse_django('/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.code')
+    # parse_django('/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.code')
 
-    # code = """pos_inf = 1e200 * 1e200"""
-    # ast_node = code_to_ast(code)
-    # parse_tree = parse(code)
-    # print parse_tree
-    # ast_tree = tree_to_ast(parse_tree)
+    code = """a = soreted(my_dict, key=lambda x: my_dict[x], reverse=True)"""
+    gold_ast_node = code_to_ast(code)
+    parse_tree = parse(code)
+    print parse_tree
+    ast_tree = tree_to_ast(parse_tree)
     # #
-    # import astor
-    # print astor.to_source(ast_node)
+    import astor
+    print astor.to_source(ast_tree)
 
     pass

@@ -1,9 +1,26 @@
 from collections import namedtuple
+import ast
+
+from grammar import *
+
+
+class Node:
+    def __int__(self, type):
+        self.type = type
+
+    def __repr__(self):
+        return self.type.__repr__()
 
 
 class Tree:
-    def __init__(self, name, children=None):
-        self.name = name
+    def __init__(self, type, label=None, children=None):
+        if isinstance(type, str):
+            if type in ast_types:
+                type = ast_types[type]
+
+        self.type = type
+        self.label = label
+
         self.children = list()
         if children and isinstance(children, list):
             self.children.extend(children)
@@ -18,12 +35,21 @@ class Tree:
     def is_preterminal(self):
         return len(self.children) == 1 and self.children[0].is_leaf
 
+    @property
+    def type_name(self):
+        if isinstance(self.type, str):
+            return self.type
+        return self.type.__name__
+
     def __repr__(self):
         repr_str = ''
         if not self.is_leaf:
             repr_str += '('
 
-        repr_str += str(self.name)
+        repr_str += self.type_name
+
+        if self.label:
+            repr_str += '{%s}' % self.label
 
         if not self.is_leaf:
             for child in self.children:
@@ -35,13 +61,21 @@ class Tree:
     def get_rule_list(self, include_leaf=True):
         if self.is_preterminal:
             if include_leaf:
-                return [Rule(self.name, self.children[0].name)]
+                return [Rule(self.type_name, self.children[0].label)]
             return []
         elif self.is_leaf:
             return []
 
-        targets = [child.name for child in self.children]
-        rule = Rule(self.name, targets)
+        rule_src = self.type_name
+        targets = []
+        for child in self.children:
+            tgt = child.type_name
+            if child.label:
+                tgt += '{%s}' % child.label
+
+            targets.append(tgt)
+
+        rule = Rule(rule_src, targets)
 
         rule_list = [rule]
         for child in self.children:
@@ -77,7 +111,16 @@ def extract_rule(parse_tree):
     if parse_tree.is_leaf or parse_tree.is_preterminal:
         return rules
 
-    rules.add(Rule(parse_tree.name, [child.name for child in parse_tree.children]))
+    rule_src = parse_tree.type_name
+    targets = []
+    for child in parse_tree.children:
+        tgt = child.type_name
+        if child.label:
+            tgt += '{%s}' % child.label
+
+        targets.append(tgt)
+
+    rules.add(Rule(rule_src, targets))
 
     for child in parse_tree.children:
         child_rules = extract_rule(child)
