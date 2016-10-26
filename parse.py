@@ -22,6 +22,29 @@ for name, obj in inspect.getmembers(sys.modules['ast']):
         ast_classes[name] = obj
 
 
+ast_node_black_list = {'ctx'}
+
+ast_class_fields = {
+    'FunctionDef': {
+        'name': {
+            'type': 'arguments',
+            'is_list': False,
+            'is_optional': False
+        },
+        'args': {
+            'type': ast.arguments,
+            'is_list': False,
+            'is_optional': False
+        },
+        'body': {
+            'type': ast.stmt,
+            'is_list': True,
+            'is_optional': False
+        },
+    }
+}
+
+
 def escape(text):
     text = text \
         .replace('"', '`') \
@@ -88,8 +111,13 @@ def get_tree(node):
 
     for field_name, field in ast.iter_fields(node):
         # omit empty fields
+        if not field:
+            continue
+
         if isinstance(field, ast.AST):
-            if len(field._fields) == 0:
+            # if len(field._fields) == 0:
+            #     continue
+            if field_name in ast_node_black_list:
                 continue
 
             child = get_tree(field)
@@ -104,13 +132,17 @@ def get_tree(node):
             child = Tree(field_name, Tree(field))
 
             tree.children.append(child)
-        elif isinstance(field, list) and field:
-            child = Tree(field_name)
+        elif isinstance(field, list):
+            if len(field) > 0:
+                child = Tree(field_name)
+                list_node = Tree('list')
+                child.children.append(list_node)
+                for n in field:
+                    list_node.children.append(get_tree(n))
 
-            for n in field:
-                child.children.append(get_tree(n))
-
-            tree.children.append(child)
+                tree.children.append(child)
+        else:
+            raise RuntimeError('unknown field!')
 
     return tree
 
@@ -189,6 +221,9 @@ def tree_to_ast(tree):
     node_name = tree.name
 
     if tree.is_leaf:
+        if node_name in ast_classes:
+            return ast_classes[node_name]()
+
         return node_name
     elif node_name in ast_classes:
         src_class = ast_classes[node_name]
@@ -209,16 +244,25 @@ def tree_to_ast(tree):
         ast_node = src_class()
         for child_node in tree.children:
             field = child_node.name
-            if len(child_node.children) > 1:
+            if len(child_node.children) == 1 and child_node.children[0].name == 'list':
                 field_value = []
-                for sub_node in child_node.children:
+                nodes_in_list = child_node.children[0].children
+                for sub_node in nodes_in_list:
                     sub_node_ast = tree_to_ast(sub_node)
                     field_value.append(sub_node_ast)
             else:
+                assert len(child_node.children) == 1
                 sub_node = child_node.children[0]
                 field_value = tree_to_ast(sub_node)
 
             setattr(ast_node, field, field_value)
+
+        for field in tgt_fields:
+            if not hasattr(ast_node, field):
+                if field[-1] == 's':
+                    setattr(ast_node, field, list())
+                else:
+                    setattr(ast_node, field, None)
 
         return ast_node
 
@@ -245,10 +289,12 @@ if __name__ == '__main__':
 
     # parse_django('/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.code')
 
-    parse_tree = parse("""val = ', ' . join ( sanitize_address ( addr , encoding )  for addr in getaddresses ( ( val , ) ) )""")
+    code = """val = Header ( val , encoding ) . encode ( )"""
+    ast_node = code_to_ast(code)
+    parse_tree = parse(code)
     ast_tree = tree_to_ast(parse_tree)
 
     import astor
-    astor.to_source(ast_tree)
+    print astor.to_source(ast_tree)
 
     pass
