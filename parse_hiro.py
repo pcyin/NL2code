@@ -66,7 +66,7 @@ def main():
     p_finally = re.compile(r'^finally\s?')
     p_decorator = re.compile(r'^@.*')
 
-    for l in ["""val = ', ' . join ( sanitize_address ( addr , encoding )  for addr in getaddresses ( ( val , ) ) )"""]:
+    for l in ["""val = Header ( val , encoding ) . encode ( )"""]:  # val = ', ' . join ( sanitize_address ( addr , encoding )  for addr in getaddresses ( ( val , ) ) )
         l = l.strip()
         if not l:
             print()

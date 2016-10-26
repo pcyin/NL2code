@@ -1,6 +1,7 @@
 import ast
 import re
 import sys, inspect
+import astor
 from collections import OrderedDict
 
 from tree import *
@@ -24,10 +25,12 @@ for name, obj in inspect.getmembers(sys.modules['ast']):
 
 ast_node_black_list = {'ctx'}
 
+valid_ast_leaf_nodes = {ast.Ellipsis, ast.And, ast.Or, ast.Add, ast.Sub}
+
 ast_class_fields = {
     'FunctionDef': {
         'name': {
-            'type': 'arguments',
+            'type': 'identifier',
             'is_list': False,
             'is_optional': False
         },
@@ -41,7 +44,622 @@ ast_class_fields = {
             'is_list': True,
             'is_optional': False
         },
-    }
+        'decorator_list': {
+            'type': ast.expr,
+            'is_list': True,
+            'is_optional': False
+        }
+    },
+    'ClassDef': {
+        'name': {
+            'type': ast.arguments,
+            'is_list': False,
+            'is_optional': False
+        },
+        'bases': {
+            'type': ast.expr,
+            'is_list': True,
+            'is_optional': False
+        },
+        'body': {
+            'type': ast.stmt,
+            'is_list': True,
+            'is_optional': False
+        },
+        'decorator_list': {
+            'type': ast.expr,
+            'is_list': True,
+            'is_optional': False
+        }
+    },
+    'Return': {
+        'value': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': True
+        },
+    },
+    'Delete': {
+        'targets': {
+            'type': ast.expr,
+            'is_list': True,
+            'is_optional': False
+        },
+    },
+    'Assign': {
+        'targets': {
+            'type': ast.expr,
+            'is_list': True,
+            'is_optional': False
+        },
+        'value': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': False
+        }
+    },
+    'AugAssign': {
+        'target': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': False
+        },
+        'op': {
+            'type': ast.operator,
+            'is_list': False,
+            'is_optional': False
+        },
+        'value': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': False
+        }
+    },
+    'Print': {
+        'dest': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': True
+        },
+        'values': {
+            'type': ast.expr,
+            'is_list': True,
+            'is_optional': False
+        },
+        'nl': {
+            'type': 'bool',
+            'is_list': False,
+            'is_optional': False
+        }
+    },
+    'For': {
+        'target': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': False
+        },
+        'iter': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': False
+        },
+        'body': {
+            'type': ast.stmt,
+            'is_list': True,
+            'is_optional': False
+        },
+        'orelse': {
+            'type': ast.stmt,
+            'is_list': True,
+            'is_optional': False
+        }
+    },
+    'While': {
+        'test': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': False
+        },
+        'body': {
+            'type': ast.stmt,
+            'is_list': True,
+            'is_optional': False
+        },
+        'orelse': {
+            'type': ast.stmt,
+            'is_list': True,
+            'is_optional': False
+        },
+    },
+    'If': {
+        'test': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': False
+        },
+        'body': {
+            'type': ast.stmt,
+            'is_list': True,
+            'is_optional': False
+        },
+        'orelse': {
+            'type': ast.stmt,
+            'is_list': True,
+            'is_optional': False
+        },
+    },
+    'With': {
+        'context_expr': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': False
+        },
+        'optional_vars': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': True
+        },
+        'body': {
+            'type': ast.stmt,
+            'is_list': True,
+            'is_optional': False
+        },
+    },
+    'Raise': {
+        'type': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': True
+        },
+        'inst': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': True
+        },
+        'tback': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': True
+        },
+    },
+    'TryExcept': {
+        'body': {
+            'type': ast.stmt,
+            'is_list': True,
+            'is_optional': False
+        },
+        'handlers': {
+            'type': ast.excepthandler,
+            'is_list': True,
+            'is_optional': False
+        },
+        'orelse': {
+            'type': ast.stmt,
+            'is_list': True,
+            'is_optional': False
+        },
+    },
+    'TryFinally': {
+        'body': {
+            'type': ast.stmt,
+            'is_list': True,
+            'is_optional': False
+        },
+        'finalbody': {
+            'type': ast.stmt,
+            'is_list': True,
+            'is_optional': False
+        }
+    },
+    'Assert': {
+        'test': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': False
+        },
+        'msg': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': True
+        }
+    },
+    'Import': {
+        'names': {
+            'type': ast.alias,
+            'is_list': True,
+            'is_optional': False
+        }
+    },
+    'ImportFrom': {
+        'module': {
+            'type': 'identifier',
+            'is_list': False,
+            'is_optional': True
+        },
+        'names': {
+            'type': ast.alias,
+            'is_list': True,
+            'is_optional': False
+        },
+        'level': {
+            'type': 'int',
+            'is_list': False,
+            'is_optional': True
+        }
+    },
+    'Exec': {
+        'body': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': False
+        },
+        'globals': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': True
+        },
+        'locals': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': True
+        },
+    },
+    'Global': {
+        'names': {
+            'type': 'identifier',
+            'is_list': True,
+            'is_optional': False
+        },
+    },
+    'Expr': {
+        'value': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': False
+        },
+    },
+    'BoolOp': {
+        'op': {
+            'type': ast.boolop,
+            'is_list': False,
+            'is_optional': False
+        },
+        'values': {
+            'type': ast.expr,
+            'is_list': True,
+            'is_optional': False
+        },
+    },
+    'BinOp': {
+        'left': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': False
+        },
+        'op': {
+            'type': ast.operator,
+            'is_list': False,
+            'is_optional': False
+        },
+        'right': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': False
+        },
+    },
+    'UnaryOp': {
+        'op': {
+            'type': ast.unaryop,
+            'is_list': False,
+            'is_optional': False
+        },
+        'operand': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': False
+        },
+    },
+    'Lambda': {
+        'args': {
+            'type': ast.arguments,
+            'is_list': False,
+            'is_optional': False
+        },
+        'body': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': False
+        },
+    },
+    'IfExp': {
+        'test': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': False
+        },
+        'body': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': False
+        },
+        'orelse': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': False
+        },
+    },
+    'Dict': {
+        'keys': {
+            'type': ast.expr,
+            'is_list': True,
+            'is_optional': False
+        },
+        'values': {
+            'type': ast.expr,
+            'is_list': True,
+            'is_optional': False
+        },
+    },
+    'Set': {
+        'elts': {
+            'type': ast.expr,
+            'is_list': True,
+            'is_optional': False
+        },
+    },
+    'ListComp': {
+        'elt': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': False
+        },
+        'generators': {
+            'type': ast.comprehension,
+            'is_list': True,
+            'is_optional': False
+        },
+    },
+    'SetComp': {
+        'elt': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': False
+        },
+        'generators': {
+            'type': ast.comprehension,
+            'is_list': True,
+            'is_optional': False
+        },
+    },
+    'DictComp': {
+        'key': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': False
+        },
+        'value': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': False
+        },
+        'generators': {
+            'type': ast.comprehension,
+            'is_list': True,
+            'is_optional': False
+        },
+    },
+    'GeneratorExp': {
+        'elt': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': False
+        },
+        'generators': {
+            'type': ast.comprehension,
+            'is_list': True,
+            'is_optional': False
+        },
+    },
+    'Yield': {
+        'value': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': True
+        }
+    },
+    'Compare': {
+        'left': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': False
+        },
+        'ops': {
+            'type': ast.cmpop,
+            'is_list': True,
+            'is_optional': False
+        },
+        'comparators': {
+            'type': ast.expr,
+            'is_list': True,
+            'is_optional': False
+        },
+    },
+    'Call': {
+        'func': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': False
+        },
+        'args': {
+            'type': ast.expr,
+            'is_list': True,
+            'is_optional': False
+        },
+        'keywords': {
+            'type': ast.keyword,
+            'is_list': True,
+            'is_optional': False
+        },
+        'starargs': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': True
+        },
+        'kwargs': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': True
+        },
+    },
+    'Repr': {
+        'value': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': False
+        }
+    },
+    'Num': {
+        'n': {
+            'type': 'object',
+            'is_list': False,
+            'is_optional': False
+        }
+    },
+    'Str': {
+        's': {
+            'type': 'string',
+            'is_list': False,
+            'is_optional': False
+        }
+    },
+    'Attribute': {
+        'value': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': False
+        },
+        'attr': {
+            'type': 'identifier',
+            'is_list': False,
+            'is_optional': False
+        },
+        'ctx': {
+            'type': ast.expr_context,
+            'is_list': False,
+            'is_optional': False
+        },
+    },
+    'Subscript': {
+        'value': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': False
+        },
+        'slice': {
+            'type': ast.slice,
+            'is_list': False,
+            'is_optional': False
+        },
+    },
+    'Name': {
+        'id': {
+            'type': 'identifier',
+            'is_list': False,
+            'is_optional': False
+        }
+    },
+    'List': {
+        'elts': {
+            'type': ast.expr,
+            'is_list': True,
+            'is_optional': False
+        },
+        'ctx': {
+            'type': ast.expr_context,
+            'is_list': False,
+            'is_optional': False
+        },
+    },
+    'Tuple': {
+        'elts': {
+            'type': ast.expr,
+            'is_list': True,
+            'is_optional': False
+        },
+        'ctx': {
+            'type': ast.expr_context,
+            'is_list': False,
+            'is_optional': False
+        },
+    },
+    'ExceptHandler': {
+        'type': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': True
+        },
+        'name': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': True
+        },
+        'body': {
+            'type': ast.stmt,
+            'is_list': True,
+            'is_optional': False
+        }
+    },
+    'arguments': {
+        'args': {
+            'type': ast.expr,
+            'is_list': True,
+            'is_optional': False
+        },
+        'vararg': {
+            'type': 'identifier',
+            'is_list': False,
+            'is_optional': True
+        },
+        'kwarg': {
+            'type': 'identifier',
+            'is_list': False,
+            'is_optional': True
+        },
+        'defaults': {
+            'type': ast.expr,
+            'is_list': True,
+            'is_optional': False
+        },
+    },
+    'comprehension': {
+        'target': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': False
+        },
+        'iter': {
+            'type': ast.expr,
+            'is_list': False,
+            'is_optional': False
+        },
+        'ifs': {
+            'type': ast.expr,
+            'is_list': True,
+            'is_optional': False
+        },
+    },
+    'alias': {
+        'name': {
+            'type': 'identifier',
+            'is_list': False,
+            'is_optional': False
+        },
+        'asname': {
+            'type': 'identifier',
+            'is_list': False,
+            'is_optional': True
+        }
+    },
 }
 
 
@@ -111,7 +729,7 @@ def get_tree(node):
 
     for field_name, field in ast.iter_fields(node):
         # omit empty fields
-        if not field:
+        if field is None or (isinstance(field, list) and len(field) == 0):
             continue
 
         if isinstance(field, ast.AST):
@@ -126,19 +744,21 @@ def get_tree(node):
         elif isinstance(field, str):
             field_val = escape(field)
             child = Tree(field_name, Tree(field_val))
-
             tree.children.append(child)
         elif isinstance(field, int):
             child = Tree(field_name, Tree(field))
-
+            tree.children.append(child)
+        elif isinstance(field, float):
+            child = Tree(field_name, Tree(field))
             tree.children.append(child)
         elif isinstance(field, list):
             if len(field) > 0:
                 child = Tree(field_name)
-                list_node = Tree('list')
-                child.children.append(list_node)
+                # list_node = Tree('list')
+                # child.children.append(list_node)
                 for n in field:
-                    list_node.children.append(get_tree(n))
+                    # list_node.children.append(get_tree(n))
+                    child.children.append(get_tree(n))
 
                 tree.children.append(child)
         else:
@@ -186,15 +806,17 @@ def parse_django(code_file):
     parse_trees = []
     for line in open(code_file):
         code = line.strip()
-        try:
-            parse_tree = parse(code)
-            rule_list = parse_tree.get_rule_list(include_leaf=False)
-            parse_trees.append(parse_tree)
+        # try:
+        parse_tree = parse(code)
+        rule_list = parse_tree.get_rule_list(include_leaf=False)
+        parse_trees.append(parse_tree)
+        ast_tree = tree_to_ast(parse_tree)
+        print astor.to_source(ast_tree)
             # print parse_tree
-        except Exception as e:
-            error_num += 1
-            pass
-            # print e
+        # except Exception as e:
+        #     error_num += 1
+        #     #pass
+        #     #print e
 
         line_num += 1
 
@@ -221,8 +843,21 @@ def tree_to_ast(tree):
     node_name = tree.name
 
     if tree.is_leaf:
-        if node_name in ast_classes:
-            return ast_classes[node_name]()
+        if node_name in ast_classes and node_name not in {'alias', 'operator'}:
+            ast_node = ast_classes[node_name]()
+
+            fields_info = None
+            # init fields to empty
+            if node_name in ast_class_fields:
+                fields_info = ast_class_fields[node_name]
+
+            for field in ast_node._fields:
+                if fields_info and fields_info[field]['is_list'] and not fields_info[field]['is_optional']:
+                    setattr(ast_node, field, list())
+                else:
+                    setattr(ast_node, field, None)
+
+            return ast_node
 
         return node_name
     elif node_name in ast_classes:
@@ -241,12 +876,17 @@ def tree_to_ast(tree):
         #         else:
         #             child_nodes[child_name] = [old_child, child]
 
+        fields_info = None
+        if node_name in ast_class_fields:
+            fields_info = ast_class_fields[node_name]
+
         ast_node = src_class()
         for child_node in tree.children:
             field = child_node.name
-            if len(child_node.children) == 1 and child_node.children[0].name == 'list':
+
+            if fields_info and fields_info[field]['is_list']:
                 field_value = []
-                nodes_in_list = child_node.children[0].children
+                nodes_in_list = child_node.children
                 for sub_node in nodes_in_list:
                     sub_node_ast = tree_to_ast(sub_node)
                     field_value.append(sub_node_ast)
@@ -259,7 +899,7 @@ def tree_to_ast(tree):
 
         for field in tgt_fields:
             if not hasattr(ast_node, field):
-                if field[-1] == 's':
+                if fields_info and fields_info[field]['is_list'] and not fields_info[field]['is_optional']:
                     setattr(ast_node, field, list())
                 else:
                     setattr(ast_node, field, None)
@@ -287,14 +927,15 @@ if __name__ == '__main__':
     # print parse('for f in sorted ( os . listdir ( self . path ) ) : sum = sum + 1; sum = "(hello there)" ')
     # print parse('global _standard_context_processors')
 
-    # parse_django('/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.code')
+    parse_django('/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.code')
 
-    code = """val = Header ( val , encoding ) . encode ( )"""
-    ast_node = code_to_ast(code)
-    parse_tree = parse(code)
-    ast_tree = tree_to_ast(parse_tree)
-
-    import astor
-    print astor.to_source(ast_tree)
+    # code = """pos_inf = 1e200 * 1e200"""
+    # ast_node = code_to_ast(code)
+    # parse_tree = parse(code)
+    # print parse_tree
+    # ast_tree = tree_to_ast(parse_tree)
+    # #
+    # import astor
+    # print astor.to_source(ast_node)
 
     pass
