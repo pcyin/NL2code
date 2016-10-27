@@ -710,17 +710,6 @@ def escape(text):
     return repr(text)[1:-1] if text else '-NONE-'
 
 
-# x is a type
-def typename(x):
-    if isinstance(x, str):
-        return x
-    return x.__name__
-
-
-def is_builtin_type(x):
-    return x == str or x == int or x == float or x == bool or x == object or x == 'identifier'
-
-
 def ast_to_tree(node):
     if isinstance(node, str):
         label = escape(node)
@@ -843,7 +832,7 @@ def parse_django(code_file):
 
     with open('grammar.txt', 'w') as f:
         for rule in grammar:
-            str = rule.parent + ' -> ' + ', '.join(rule.children)
+            str = rule.__repr__()
             f.write(str + '\n')
 
     with open('parse_trees.txt', 'w') as f:
@@ -923,15 +912,16 @@ if __name__ == '__main__':
     # print parse('for f in sorted ( os . listdir ( self . path ) ) : sum = sum + 1; sum = "(hello there)" ')
     # print parse('global _standard_context_processors')
 
-    # parse_django('/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.code')
+    parse_django('/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.code')
 
-    code = """a = soreted(my_dict, key=lambda x: my_dict[x], reverse=True)"""
-    gold_ast_node = code_to_ast(code)
-    parse_tree = parse(code)
-    print parse_tree
-    ast_tree = tree_to_ast(parse_tree)
-    # #
-    import astor
-    print astor.to_source(ast_tree)
+    # code = """a = 1 == 1 or x == True"""
+    # # # gold_ast_node = code_to_ast(code)
+    # parse_tree = parse(code)
+    # parse_tree.get_rule_list(include_leaf=False)
+    # print parse_tree
+    # ast_tree = tree_to_ast(parse_tree)
+    # # # #
+    # import astor
+    # print astor.to_source(ast_tree)
 
     pass

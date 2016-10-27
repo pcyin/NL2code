@@ -4,14 +4,6 @@ import ast
 from grammar import *
 
 
-class Node:
-    def __int__(self, type):
-        self.type = type
-
-    def __repr__(self):
-        return self.type.__repr__()
-
-
 class Tree:
     def __init__(self, type, label=None, children=None):
         if isinstance(type, str):
@@ -61,21 +53,18 @@ class Tree:
     def get_rule_list(self, include_leaf=True):
         if self.is_preterminal:
             if include_leaf:
-                return [Rule(self.type_name, self.children[0].label)]
+                return [TypedRule(Node(self.type, self.label), Node(self.children[0].type, self.children[0].label))]
             return []
         elif self.is_leaf:
             return []
 
-        rule_src = self.type_name
+        src = Node(self.type, None)
         targets = []
         for child in self.children:
-            tgt = child.type_name
-            if child.label:
-                tgt += '{%s}' % child.label
-
+            tgt = Node(child.type, child.label)
             targets.append(tgt)
 
-        rule = Rule(rule_src, targets)
+        rule = TypedRule(src, targets)
 
         rule_list = [rule]
         for child in self.children:
@@ -133,7 +122,7 @@ def extract_rule(parse_tree):
 def get_grammar(parse_trees):
     grammar = set()
     for parse_tree in parse_trees:
-        rules = extract_rule(parse_tree)
+        rules = parse_tree.get_rule_list(include_leaf=False)  # extract_rule(parse_tree)
         for rule in rules:
             grammar.add(rule)
 

@@ -18,11 +18,11 @@ if __name__ == '__main__':
     # model.build()
     # print model.train_func(query_tokens, rules)
 
-    train_data, dev_data, test_data = deserialize_from_file('django.bin')
+    train_data, dev_data, test_data = deserialize_from_file('django.typed_rull.bin')
 
     model = Model()
     model.build()
-    model.load('model.epoch11.npz')
+    model.load('model.epoch10.npz')
 
     # model.save('model')
     # model.load('model.npz')

@@ -233,7 +233,7 @@ def parse_django_dataset():
 
     test_data.init_data_matrices()
 
-    # serialize_to_file((train_data, dev_data, test_data), 'django.bin')
+    serialize_to_file((train_data, dev_data, test_data), 'django.typed_rull.bin')
 
 
 if __name__== '__main__':
