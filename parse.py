@@ -118,7 +118,7 @@ ast_class_fields = {
             'is_optional': False
         },
         'nl': {
-            'type': 'bool',
+            'type': bool,
             'is_list': False,
             'is_optional': False
         }
@@ -273,7 +273,7 @@ ast_class_fields = {
             'is_optional': False
         },
         'level': {
-            'type': 'int',
+            'type': int,
             'is_list': False,
             'is_optional': True
         }
@@ -699,8 +699,8 @@ ast_class_fields = {
 
 def escape(text):
     text = text \
-        .replace('"', '`') \
-        .replace('\'', '`') \
+        .replace('"', '-``-') \
+        .replace('\'', '-`-') \
         .replace(' ', '-SP-') \
         .replace('\t', '-TAB-') \
         .replace('\n', '-NL-') \
@@ -708,6 +708,37 @@ def escape(text):
         .replace(')', '-RRB-') \
         .replace('|', '-BAR-')
     return repr(text)[1:-1] if text else '-NONE-'
+
+
+def unescape(text):
+    text = text \
+        .replace('-``-', '"') \
+        .replace('-`-', '\'') \
+        .replace('-SP-', ' ') \
+        .replace('-TAB-', '\t') \
+        .replace('-NL-', '\n') \
+        .replace('-LRB-', '(') \
+        .replace('-RRB-', ')') \
+        .replace('-BAR-', '|')
+
+    return text
+
+
+def is_compositional_leaf(node):
+    is_leaf = True
+
+    for field_name, field_value in ast.iter_fields(node):
+        if field_name in ast_node_black_list:
+            continue
+
+        if field_value is None:
+            is_leaf &= True
+        elif isinstance(field_value, list) and len(field_value) == 0:
+            is_leaf &= True
+        else:
+            is_leaf &= False
+
+    return is_leaf
 
 
 def ast_to_tree(node):
@@ -726,7 +757,14 @@ def ast_to_tree(node):
 
     # it's a leaf AST node
     if len(node._fields) == 0:
-        return Tree(node_type)
+        return tree
+
+    # if it's a compositional AST node with empty fields
+    if is_compositional_leaf(node):
+        epsilon = Tree('epsilon')
+        tree.children.append(epsilon)
+
+        return tree
 
     # it's a compositional AST node
     fields_info = ast_class_fields[node_type.__name__]
@@ -748,7 +786,7 @@ def ast_to_tree(node):
             child = ast_to_tree(field_value)
             tree.children.append(Tree(field_type, field_name, child))
         elif isinstance(field_value, str) or isinstance(field_value, int) or isinstance(field_value, float):
-            child = Tree(field_type, field_name, ast_to_tree(field_value))
+            child = Tree(type(field_value), field_name, ast_to_tree(field_value))
             tree.children.append(child)
         elif is_list:
             if len(field_value) > 0:
@@ -811,8 +849,21 @@ def parse_django(code_file):
         code = line.strip()
         # try:
         parse_tree = parse(code)
-        rule_list = parse_tree.get_rule_list(include_leaf=False)
+
+        # leaves = parse_tree.get_leaves()
+        # for leaf in leaves:
+        #     if not is_terminal_type(leaf.type):
+        #         print parse_tree
+
         parse_trees.append(parse_tree)
+
+        # check rules
+        # rule_list = parse_tree.get_rule_list(include_leaf=True)
+        # for rule in rule_list:
+        #     if rule.parent.type == int and rule.children[0].type == int:
+        #         # rule.parent.type == str and rule.children[0].type == str:
+        #         pass
+
         # ast_tree = tree_to_ast(parse_tree)
         # print astor.to_source(ast_tree)
             # print parse_tree
@@ -858,6 +909,10 @@ def tree_to_ast(tree):
             fields_info = ast_class_fields[node_type_name]
 
             for child_node in tree.children:
+                # if it's a compositional leaf
+                if child_node.type == 'epsilon':
+                    continue
+
                 field_type = child_node.type
                 field_label = child_node.label
                 field_entry = ast_class_fields[node_type_name][field_label]
@@ -881,6 +936,7 @@ def tree_to_ast(tree):
                 else:
                     assert len(child_node.children) == 1
                     sub_node = child_node.children[0]
+
                     field_value = tree_to_ast(sub_node)
 
                 setattr(ast_node, field_label, field_value)
@@ -912,15 +968,16 @@ if __name__ == '__main__':
     # print parse('for f in sorted ( os . listdir ( self . path ) ) : sum = sum + 1; sum = "(hello there)" ')
     # print parse('global _standard_context_processors')
 
-    parse_django('/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.code')
+    # parse_django('/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.code')
 
-    # code = """a = 1 == 1 or x == True"""
-    # # # gold_ast_node = code_to_ast(code)
-    # parse_tree = parse(code)
-    # parse_tree.get_rule_list(include_leaf=False)
-    # print parse_tree
+    code = 'sum = True'
+    # """sorted(my_dict, key=lambda x: my_dict[x], reverse=True)"""
+    # # # # gold_ast_node = code_to_ast(code)
+    parse_tree = parse(code)
+    # # parse_tree.get_rule_list(include_leaf=False)
+    print parse_tree
     # ast_tree = tree_to_ast(parse_tree)
-    # # # #
+    # # # # #
     # import astor
     # print astor.to_source(ast_tree)
 

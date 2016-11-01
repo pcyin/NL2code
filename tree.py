@@ -40,7 +40,7 @@ class Tree:
 
         repr_str += self.type_name
 
-        if self.label:
+        if self.label is not None:
             repr_str += '{%s}' % self.label
 
         if not self.is_leaf:
@@ -50,10 +50,24 @@ class Tree:
 
         return repr_str
 
+    def get_leaves(self):
+        if self.is_leaf:
+            return [self]
+
+        leaves = []
+        for child in self.children:
+            leaves.extend(child.get_leaves())
+
+        return leaves
+
     def get_rule_list(self, include_leaf=True):
         if self.is_preterminal:
             if include_leaf:
-                return [TypedRule(Node(self.type, self.label), Node(self.children[0].type, self.children[0].label))]
+                label = None
+                if self.children[0].label is not None:
+                    label = 'val'
+
+                return [TypedRule(Node(self.type, None), Node(self.children[0].type, label))]  # self.children[0].label
             return []
         elif self.is_leaf:
             return []
@@ -120,17 +134,29 @@ def extract_rule(parse_tree):
 
 
 def get_grammar(parse_trees):
-    grammar = set()
+    rules = set()
+    rule_num_dist = defaultdict(int)
     for parse_tree in parse_trees:
-        rules = parse_tree.get_rule_list(include_leaf=False)  # extract_rule(parse_tree)
-        for rule in rules:
-            grammar.add(rule)
+        parse_tree_rules = parse_tree.get_rule_list(include_leaf=True)  # extract_rule(parse_tree)
+        len_span = len(parse_tree_rules) / 10
+        rule_num_dist['%d ~ %d' % (10 * len_span, 10 * len_span + 10)] += 1
+        for rule in parse_tree_rules:
+            rules.add(rule)
 
-    print 'num. rules: %d' % len(grammar)
+    # sorted_rule_num = sorted(rule_num_dist, reverse=False)
+    N = sum(rule_num_dist.itervalues())
+    print 'rule num distribution'
+    for k, v in rule_num_dist.iteritems():
+        print k, v / float(N)
+
+    rules = list(sorted(rules, key=lambda x: x.__repr__()))
+    grammar = Grammar(rules)
+
+    print 'num. rules: %d' % len(rules)
 
     # get unique symbols
     symbols = set()
-    for rule in grammar:
+    for rule in rules:
         symbols.add(rule.parent)
         for child in rule.children:
             symbols.add(child)
