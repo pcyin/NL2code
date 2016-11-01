@@ -21,7 +21,7 @@ def evaluate(model, dataset, verbose=True):
             continue
 
         best_hyp = hyps[0]
-        predict_rules = [dataset.grammar_id_to_rule[rid] for rid in best_hyp]
+        predict_rules = [dataset.grammar.id_to_rule[rid] for rid in best_hyp]
 
         assert len(predict_rules) > 0 and len(gold_rules) > 0
 
