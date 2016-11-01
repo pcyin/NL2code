@@ -4,6 +4,7 @@ import logging
 import collections
 import numpy as np
 import string
+import re
 
 from nn.utils.io_utils import serialize_to_file
 
@@ -87,7 +88,7 @@ class DataEntry:
         self.eid = -1
         self.query = query
         self.parse_tree = parse_tree
-        self.rules = parse_tree.get_rule_list(include_leaf=False)
+        self.rules = parse_tree.get_rule_list(include_leaf=True)
 
     @property
     def data(self):
@@ -105,12 +106,7 @@ class DataSet:
         self.name = name
         self.examples = []
         self.data_matrix = dict()
-        self.grammar = OrderedDict()
-
-        for gid, rule in enumerate(grammar, start=2):
-            self.grammar[rule] = gid
-
-        self.grammar_id_to_rule = dict((v, k) for (k, v) in self.grammar.iteritems())
+        self.grammar = grammar
 
     def add(self, example):
         example.eid = len(self.examples)
@@ -162,7 +158,7 @@ class DataSet:
 
             rule_num = len(example.rules[:MAX_EXAMPLE_RULE_NUM - 1])
             for rid, rule in enumerate(example.rules[:MAX_EXAMPLE_RULE_NUM - 1]):
-                rules[eid, rid] = self.grammar[rule]
+                rules[eid, rid] = self.grammar.rule_to_id[rule]
 
             # end of rules
             rules[eid, rule_num] = 1
@@ -233,11 +229,66 @@ def parse_django_dataset():
 
     test_data.init_data_matrices()
 
-    serialize_to_file((train_data, dev_data, test_data), 'django.typed_rull.bin')
+    serialize_to_file((train_data, dev_data, test_data), 'django.typed_rule.bin')
 
+
+def check_terminals():
+    from parse import parse_django, unescape
+    grammar, parse_trees = parse_django('/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.code')
+    annot_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.anno'
+
+    unique_terminals = set()
+    invalid_terminals = set()
+
+    for i, line in enumerate(open(annot_file)):
+        parse_tree = parse_trees[i]
+        utterance = line.strip()
+
+        leaves = parse_tree.get_leaves()
+        # tokens = set(nltk.word_tokenize(utterance))
+        leave_tokens = [l.label for l in leaves if l.label]
+
+        not_included = []
+        for leaf_token in leave_tokens:
+            leaf_token = str(leaf_token)
+            leaf_token = unescape(leaf_token)
+            if leaf_token not in utterance:
+                not_included.append(leaf_token)
+
+                if len(leaf_token) <= 15:
+                    unique_terminals.add(leaf_token)
+                else:
+                    invalid_terminals.add(leaf_token)
+            else:
+                if isinstance(leaf_token, str):
+                    print leaf_token
+
+        # if not_included:
+        #     print str(i) + '---' + ', '.join(not_included)
+
+    # print 'num of unique leaves: %d' % len(unique_terminals)
+    # print unique_terminals
+    #
+    # print 'num of invalid leaves: %d' % len(invalid_terminals)
+    # print invalid_terminals
+
+QUOTED_STRING_RE = re.compile(r"(?P<quote>['\"])(?P<string>.*?)(?<!\\)(?P=quote)")
+
+
+def process_query(query):
+    str_count = 0
+    while QUOTED_STRING_RE.search(query):
+        query = QUOTED_STRING_RE.sub('{STR:%d}' % str_count, query, 1)
+        str_count += 1
+
+    return query
 
 if __name__== '__main__':
     from nn.utils.generic_utils import init_logging
     init_logging('parse.log')
 
-    parse_django_dataset()
+    # parse_django_dataset()
+    check_terminals()
+
+    # for i, query in enumerate(open('/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.anno')):
+    #     print i, process_query(query)
