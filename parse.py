@@ -1,8 +1,14 @@
 import ast
 import re
 import sys, inspect
+from StringIO import StringIO
+
 import astor
 from collections import OrderedDict
+from tokenize import generate_tokens, tokenize
+import token as tk
+
+from nn.utils.io_utils import deserialize_from_file, serialize_to_file
 
 from tree import *
 from grammar import *
@@ -744,11 +750,11 @@ def is_compositional_leaf(node):
 def ast_to_tree(node):
     if isinstance(node, str):
         label = escape(node)
-        return Tree(str, label)
+        return Tree(str, label, holds_value=True)
     elif isinstance(node, int):
-        return Tree(int, node)
+        return Tree(int, node, holds_value=True)
     elif isinstance(node, float):
-        return Tree(float, node)
+        return Tree(float, node, holds_value=True)
 
     assert isinstance(node, ast.AST)
 
@@ -850,10 +856,12 @@ def parse_django(code_file):
         # try:
         parse_tree = parse(code)
 
-        # leaves = parse_tree.get_leaves()
-        # for leaf in leaves:
-        #     if not is_terminal_type(leaf.type):
-        #         print parse_tree
+        leaves = parse_tree.get_leaves()
+        for leaf in leaves:
+            if not is_terminal_type(leaf.type):
+                print parse_tree
+
+        parse_tree = add_root(parse_tree)
 
         parse_trees.append(parse_tree)
 
@@ -951,6 +959,34 @@ def tree_to_ast(tree):
         return ast_node
 
 
+def decode_tree_to_ast(decode_tree):
+    decode_tree = decode_tree.children[0]
+    terminals = decode_tree.get_leaves()
+
+    for terminal in terminals:
+        if type(terminal.label) == str:
+            if terminal.label.endswith('<eos>'):
+                terminal.label = terminal.label[:-5]
+        if terminal.type in {int, float, str}:
+            # cast to target data type
+            terminal.label = terminal.type(terminal.label)
+
+    ast_tree = tree_to_ast(decode_tree)
+
+    return ast_tree
+
+
+def tokenize(code):
+    token_stream = generate_tokens(StringIO(code).readline)
+    tokens = []
+    for toknum, tokval, (srow, scol), (erow, ecol), _ in token_stream:
+        if toknum == tk.ENDMARKER:
+            break
+        tokens.append(tokval)
+
+    return tokens
+
+
 if __name__ == '__main__':
     #     node = ast.parse('''
     # # for i in range(1, 100):
@@ -970,15 +1006,23 @@ if __name__ == '__main__':
 
     # parse_django('/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.code')
 
-    code = 'sum = True'
+    # code = 'sum = True'
     # """sorted(my_dict, key=lambda x: my_dict[x], reverse=True)"""
     # # # # gold_ast_node = code_to_ast(code)
-    parse_tree = parse(code)
+    # parse_tree = parse(code)
     # # parse_tree.get_rule_list(include_leaf=False)
-    print parse_tree
+    # print parse_tree
     # ast_tree = tree_to_ast(parse_tree)
     # # # # #
     # import astor
     # print astor.to_source(ast_tree)
+
+    from dataset import DataSet, Vocab, DataEntry, Action
+    # train_data, dev_data, test_data = deserialize_from_file('django.cleaned.dataset.bin')
+    cand_list = deserialize_from_file('cand_hyps.18771.bin')
+    hyp_tree = cand_list[3].tree
+
+    ast_tree = decode_tree_to_ast(hyp_tree)
+    print astor.to_source(ast_tree)
 
     pass

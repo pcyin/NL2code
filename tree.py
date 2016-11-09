@@ -1,17 +1,19 @@
 from collections import namedtuple
 import ast
+import cPickle
 
 from grammar import *
 
 
 class Tree:
-    def __init__(self, type, label=None, children=None):
+    def __init__(self, type, label=None, children=None, holds_value=False):
         if isinstance(type, str):
             if type in ast_types:
                 type = ast_types[type]
 
         self.type = type
         self.label = label
+        self.holds_value = holds_value
 
         self.children = list()
         if children and isinstance(children, list):
@@ -32,6 +34,27 @@ class Tree:
         if isinstance(self.type, str):
             return self.type
         return self.type.__name__
+
+    @property
+    def node(self):
+        return Node(self.type, self.label)
+
+    def apply_rule(self, rule):
+        assert rule.parent.type == self.type
+
+        for child_node in rule.children:
+            child = Tree(child_node.type, child_node.label)
+            if is_builtin_type(rule.parent.type):
+                child.label = None
+                child.holds_value = True
+
+            self.children.append(child)
+
+    def append_token(self, token):
+        if self.label is None:
+            self.label = token
+        else:
+            self.label += token
 
     def __repr__(self):
         repr_str = ''
@@ -60,12 +83,13 @@ class Tree:
 
         return leaves
 
-    def get_rule_list(self, include_leaf=True):
+    def get_rule_list(self, include_leaf=True, leaf_val=False):
         if self.is_preterminal:
             if include_leaf:
                 label = None
                 if self.children[0].label is not None:
-                    label = 'val'
+                    if leaf_val: label = self.children[0].label
+                    else: label = 'val'
 
                 return [TypedRule(Node(self.type, None), Node(self.children[0].type, label))]  # self.children[0].label
             return []
@@ -82,9 +106,44 @@ class Tree:
 
         rule_list = [rule]
         for child in self.children:
-            rule_list.extend(child.get_rule_list(include_leaf=include_leaf))
+            rule_list.extend(child.get_rule_list(include_leaf=include_leaf, leaf_val=leaf_val))
 
         return rule_list
+
+    def copy(self):
+        # if not hasattr(self, '_dump'):
+        #     dump = cPickle.dumps(self, -1)
+        #     setattr(self, '_dump', dump)
+        #
+        #     return cPickle.loads(dump)
+        #
+        # return cPickle.loads(self._dump)
+
+        new_tree = Tree(self.type, self.label, holds_value=self.holds_value)
+        if self.is_leaf:
+            return new_tree
+
+        for child in self.children:
+            new_tree.children.append(child.copy())
+
+        return new_tree
+
+    @property
+    def size(self):
+        if self.is_leaf:
+            return 1
+
+        node_num = 1
+        for child in self.children:
+            node_num += child.size
+
+        return node_num
+
+def add_root(tree):
+    root_node = Tree('root')
+    root_node.children.append(tree)
+
+    return root_node
 
 
 class Rule:
@@ -135,19 +194,20 @@ def extract_rule(parse_tree):
 
 def get_grammar(parse_trees):
     rules = set()
-    rule_num_dist = defaultdict(int)
+    # rule_num_dist = defaultdict(int)
+
     for parse_tree in parse_trees:
         parse_tree_rules = parse_tree.get_rule_list(include_leaf=True)  # extract_rule(parse_tree)
-        len_span = len(parse_tree_rules) / 10
-        rule_num_dist['%d ~ %d' % (10 * len_span, 10 * len_span + 10)] += 1
+        # len_span = len(parse_tree_rules) / 10
+        # rule_num_dist['%d ~ %d' % (10 * len_span, 10 * len_span + 10)] += 1
         for rule in parse_tree_rules:
             rules.add(rule)
 
     # sorted_rule_num = sorted(rule_num_dist, reverse=False)
-    N = sum(rule_num_dist.itervalues())
-    print 'rule num distribution'
-    for k, v in rule_num_dist.iteritems():
-        print k, v / float(N)
+    # N = sum(rule_num_dist.itervalues())
+    # print 'rule num distribution'
+    # for k, v in rule_num_dist.iteritems():
+    #     print k, v / float(N)
 
     rules = list(sorted(rules, key=lambda x: x.__repr__()))
     grammar = Grammar(rules)

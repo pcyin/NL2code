@@ -50,7 +50,8 @@ class Learner(object):
 
                 inputs = dataset.get_prob_func_inputs(batch_ids)
 
-                batch_loss = self.model.train_func(*inputs)
+                train_func_outputs = self.model.train_func(*inputs)
+                batch_loss = train_func_outputs[0]
                 logging.debug('prob_func finished computing')
 
                 cum_nb_examples += cur_batch_size

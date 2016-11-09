@@ -130,7 +130,7 @@ def parse_django(code_file):
         code = line.strip()
         try:
             parse_tree = parse(code)
-            rule_list = parse_tree.get_rule_list(include_leaf=False)
+            # rule_list = parse_tree.get_rule_list(include_leaf=False)
             parse_trees.append(parse_tree)
             print parse_tree
         except Exception as e:
