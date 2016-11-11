@@ -184,7 +184,7 @@ class Model:
 
         self.decoder_func_next_step = theano.function(inputs, outputs)
 
-    def decode(self, example, grammar, terminal_vocab, beam_size=50, max_time_step=100):
+    def decode(self, example, grammar, terminal_vocab, beam_size=BEAM_SIZE, max_time_step=DECODE_MAX_TIME_STEP):
         # beam search decoding
 
         eos = 1
@@ -208,7 +208,7 @@ class Model:
         hyp_samples = [root_hyp]  # [list() for i in range(live_hyp_num)]
 
         # source word id in the terminal vocab
-        src_token_id = [terminal_vocab[t] for t in example.query]
+        src_token_id = [terminal_vocab[t] for t in example.query][:MAX_QUERY_LENGTH]
         unk_pos_list = [x for x, t in enumerate(src_token_id) if t == unk]
 
         # sometimes a word may appear multi-times in the source, in this case,
@@ -407,22 +407,30 @@ class Model:
     @property
     def params_dict(self):
         assert len(set(p.name for p in self.params)) == len(self.params), 'param name clashes!'
-        return OrderedDict([(p.name, p) for p in self.params])
+        return OrderedDict((p.name, p) for p in self.params)
 
-    def save(self, model_file):
+    def pull_params(self):
+        return OrderedDict([(p_name, p.get_value(borrow=False)) for (p_name, p) in self.params_dict.iteritems()])
+
+    def save(self, model_file, **kwargs):
         logging.info('save model to [%s]', model_file)
-        weights_dict = OrderedDict([(p_name, p.get_value()) for (p_name, p) in self.params_dict.iteritems()])
+
+        weights_dict = self.pull_params()
+        for k, v in kwargs.iteritems():
+            weights_dict[k] = v
+
         np.savez(model_file, **weights_dict)
 
     def load(self, model_file):
         logging.info('load model from [%s]', model_file)
         weights_dict = np.load(model_file)
 
-        assert len(weights_dict.files) == len(self.params_dict)
+        # assert len(weights_dict.files) == len(self.params_dict)
 
         for p_name, p in self.params_dict.iteritems():
             if p_name not in weights_dict:
                 logging.error('parameter [%s] not in saved weights file', p_name)
+                return 1
             else:
                 logging.info('loading parameter [%s]', p_name)
                 p.set_value(weights_dict[p_name])
