@@ -207,7 +207,20 @@ class Model:
 
         hyp_samples = [root_hyp]  # [list() for i in range(live_hyp_num)]
 
-        for t in range(max_time_step):
+        # source word id in the terminal vocab
+        src_token_id = [terminal_vocab[t] for t in example.query]
+        unk_pos_list = [x for x, t in enumerate(src_token_id) if t == unk]
+
+        # sometimes a word may appear multi-times in the source, in this case,
+        # we just copy its first appearing position. Therefore we mask the words
+        # appearing second and onwards to -1
+        token_set = set()
+        for i, tid in enumerate(src_token_id):
+            if tid in token_set:
+                src_token_id[i] = -1
+            else: token_set.add(tid)
+
+        for t in xrange(max_time_step):
             # print 'time step [%d]' % t
             decoder_prev_state = np.array([hyp.state for hyp in hyp_samples]).astype('float32')
             decoder_prev_cell = np.array([hyp.cell for hyp in hyp_samples]).astype('float32')
@@ -229,7 +242,26 @@ class Model:
 
             # iterating over items in the beam
             # print 'time step: %d, hyp num: %d' % (t, live_hyp_num)
-            for k in range(live_hyp_num):
+
+            word_prob = gen_action_prob[:, 0:1] * vocab_prob
+            word_prob[:, unk] = 0
+
+            hyp_scores = np.array([hyp.score for hyp in hyp_samples])
+
+            # word_prob[:, src_token_id] += gen_action_prob[:, 1:2] * copy_prob[:, :len(src_token_id)]
+            # word_prob[:, unk] = 0
+
+            rule_apply_cand_hyp_ids = []
+            rule_apply_cand_scores = []
+            rule_apply_cand_rules = []
+            rule_apply_cand_rule_ids = []
+
+            hyp_frontier_nts = []
+            word_gen_hyp_ids = []
+
+            unk_words = []
+
+            for k in xrange(live_hyp_num):
                 hyp = hyp_samples[k]
 
                 # if k == 0:
@@ -238,7 +270,14 @@ class Model:
                 frontier_nt = hyp.frontier_nt()
                 # we have a completed hyp
                 if frontier_nt is None:
+                    # hyp.score /= t
                     # hyp.score /= hyp.tree.size
+
+                    # remove small-sized hyps
+                    if t <= 2:
+                        continue
+
+                    hyp.n_timestep = t
                     completed_hyps.append(hyp)
                     completed_hyp_num += 1
 
@@ -255,88 +294,100 @@ class Model:
                         cur_rule_score = np.log(rule_prob[k, rule_id])
                         new_hyp_score = hyp.score + cur_rule_score
 
-                        if len(score_heap) == cut_off_k:
-                            if score_heap[0] > new_hyp_score:
-                                continue
-                            else:
-                                heapq.heappushpop(score_heap, new_hyp_score)
-                        else:
-                            heapq.heappush(score_heap, new_hyp_score)
+                        rule_apply_cand_hyp_ids.append(k)
+                        rule_apply_cand_scores.append(new_hyp_score)
+                        rule_apply_cand_rules.append(rule)
+                        rule_apply_cand_rule_ids.append(rule_id)
 
-                        new_tree = hyp.tree.copy() # copy.deepcopy(hyp.tree)
-                        new_hyp = Hyp(new_tree)
-                        new_hyp.frontier_nt().apply_rule(rule)
-
-                        new_hyp.score = new_hyp_score
-                        new_hyp.state = copy.copy(decoder_next_state[k])
-                        new_hyp.cell = copy.copy(decoder_next_cell[k])
-                        new_hyp.action_embed = rule_embedding[rule_id]
-
-                        new_hyp_samples.append(new_hyp)
                 else:  # it's a leaf!
-                    for token, tid in terminal_vocab.iteritems():
-                        tok_src_idx = -1
-                        try:
-                            tok_src_idx = example.query.index(token)
-                        except ValueError: pass
+                    for i, tid in enumerate(src_token_id):
+                        if tid != -1:
+                            word_prob[k, tid] += gen_action_prob[k, 1] * copy_prob[k, i]
 
-                        # can only generate, should not be unk!
-                        if tid != unk and (tok_src_idx < 0 or tok_src_idx >= MAX_QUERY_LENGTH):
-                            p_gen = np.log(gen_action_prob[k, 0])
-                            p_st = np.log(vocab_prob[k, tid])
-                            score = p_gen + p_st
-                        elif tid != unk:
-                            # can both generate and copy
-                            p_gen = np.log(gen_action_prob[k, 0])
-                            p_st_gen = np.log(vocab_prob[k, tid])
-                            p_copy = np.log(gen_action_prob[k, 1])
-                            p_st_copy = np.log(copy_prob[k, tok_src_idx])
-                            score = np.logaddexp(p_gen + p_st_gen, p_copy + p_st_copy)
-                        else:
-                            assert tid == unk
-                            # it's a unk!
-                            # can only copy
-                            p_copy = np.log(gen_action_prob[k, 1])
-                            # p_st_copy = np.log(copy_prob[k, tok_src_idx])
-                            tok_src_idx = copy_prob[k].argmax()
-                            token = example.query[tok_src_idx]
+                    # and unk copy probability
+                    if len(unk_pos_list) > 0:
+                        unk_pos = copy_prob[k, unk_pos_list].argmax()
+                        unk_pos = unk_pos_list[unk_pos]
 
-                            if token in terminal_vocab:
-                                continue
+                        unk_copy_score = gen_action_prob[k, 1] * copy_prob[k, unk_pos]
+                        word_prob[k, unk] = unk_copy_score
 
-                            p_st_copy = np.log(copy_prob[k, tok_src_idx])
-                            score = p_copy + p_st_copy
+                        unk_word = example.query[unk_pos]
+                        unk_words.append(unk_word)
 
-                        new_hyp_score = hyp.score + score
+                    word_gen_hyp_ids.append(k)
 
-                        if len(score_heap) == cut_off_k:
-                            if score_heap[0] > new_hyp_score:
-                                continue
-                            else:
-                                heapq.heappushpop(score_heap, new_hyp_score)
-                        else:
-                            heapq.heappush(score_heap, new_hyp_score)
-
-                        new_tree = hyp.tree.copy()  # copy.deepcopy(hyp.tree)
-                        new_hyp = Hyp(new_tree)
-                        new_hyp.frontier_nt().append_token(token)
-
-                        new_hyp.score = new_hyp_score
-                        new_hyp.state = copy.copy(decoder_next_state[k])
-                        new_hyp.cell = copy.copy(decoder_next_cell[k])
-                        new_hyp.action_embed = vocab_embedding[tid]
-
-                        new_hyp_samples.append(new_hyp)
+                hyp_frontier_nts.append(frontier_nt)
 
             # prune the hyp space
             if completed_hyp_num >= beam_size:
                 break
 
+            word_prob = np.log(word_prob)
+
+            word_gen_hyp_num = len(word_gen_hyp_ids)
+            rule_apply_cand_num = len(rule_apply_cand_scores)
+
+            if word_gen_hyp_num > 0:
+                word_gen_cand_scores = hyp_scores[word_gen_hyp_ids, None] + word_prob[word_gen_hyp_ids, :]
+                word_gen_cand_scores_flat = word_gen_cand_scores.flatten()
+
+                cand_scores = np.concatenate([rule_apply_cand_scores, word_gen_cand_scores_flat])
+            else:
+                cand_scores = np.array(rule_apply_cand_scores)
+
+            top_cand_ids = (-cand_scores).argsort()[:beam_size - completed_hyp_num]
+
+            for cand_id in top_cand_ids:
+                # cand is rule application
+                if cand_id < rule_apply_cand_num:
+                    hyp_id = rule_apply_cand_hyp_ids[cand_id]
+                    hyp = hyp_samples[hyp_id]
+                    rule_id = rule_apply_cand_rule_ids[cand_id]
+                    rule = rule_apply_cand_rules[cand_id]
+                    new_hyp_score = rule_apply_cand_scores[cand_id]
+
+                    new_tree = hyp.tree.copy()
+                    new_hyp = Hyp(new_tree)
+                    new_hyp.frontier_nt().apply_rule(rule)
+
+                    new_hyp.score = new_hyp_score
+                    new_hyp.state = copy.copy(decoder_next_state[hyp_id])
+                    new_hyp.cell = copy.copy(decoder_next_cell[hyp_id])
+                    new_hyp.action_embed = rule_embedding[rule_id]
+
+                    new_hyp_samples.append(new_hyp)
+                else:
+                    word_gen_hyp_id = (cand_id - rule_apply_cand_num) / word_prob.shape[1]
+                    hyp_id = word_gen_hyp_ids[word_gen_hyp_id]
+                    hyp = hyp_samples[hyp_id]
+                    tid = (cand_id - rule_apply_cand_num) % word_prob.shape[1]
+                    new_hyp_score = word_gen_cand_scores[word_gen_hyp_id, tid]
+
+                    if tid == unk:
+                        token = unk_words[word_gen_hyp_id]
+                    else:
+                        token = terminal_vocab.id_token_map[tid]
+
+                    new_tree = hyp.tree.copy()
+                    new_hyp = Hyp(new_tree)
+                    new_hyp.frontier_nt().append_token(token)
+
+                    new_hyp.score = new_hyp_score
+                    new_hyp.state = copy.copy(decoder_next_state[hyp_id])
+                    new_hyp.cell = copy.copy(decoder_next_cell[hyp_id])
+                    new_hyp.action_embed = vocab_embedding[tid]
+
+                    new_hyp_samples.append(new_hyp)
+
+                # cand is word generation
+
             live_hyp_num = min(len(new_hyp_samples), beam_size - completed_hyp_num)
             if live_hyp_num < 1:
                 break
 
-            hyp_samples = sorted(new_hyp_samples, key=lambda x: x.score, reverse=True)[:live_hyp_num]
+            hyp_samples = new_hyp_samples
+            # hyp_samples = sorted(new_hyp_samples, key=lambda x: x.score, reverse=True)[:live_hyp_num]
 
         completed_hyps = sorted(completed_hyps, key=lambda x: x.score, reverse=True)
 

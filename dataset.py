@@ -49,11 +49,15 @@ class Vocab(object):
         if item in self.token_id_map:
             return self.token_id_map[item]
 
-        logging.warning('encounter one unknown word [%s]' % item)
+        logging.info('encounter one unknown word [%s]' % item)
         return self.token_id_map['<unk>']
 
     def __contains__(self, item):
         return item in self.token_id_map
+
+    @property
+    def size(self):
+        return len(self.token_id_map)
 
     def __setitem__(self, key, value):
         self.token_id_map[key] = value
