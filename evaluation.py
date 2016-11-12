@@ -4,6 +4,7 @@ from model import *
 import config
 from nltk.translate.bleu_score import sentence_bleu, corpus_bleu, SmoothingFunction
 import logging
+import traceback
 
 
 def evaluate(model, dataset, verbose=True):
@@ -39,8 +40,14 @@ def evaluate(model, dataset, verbose=True):
 
     return exact_match_ratio
 
-def evaluate_decode_results(dataset, decode_results):
+def evaluate_decode_results(dataset, decode_results, verbose=True):
     assert dataset.count == len(decode_results)
+
+    f = None
+    if verbose:
+        f = open(dataset.name + '.exact_match', 'w')
+        logging.info('evaluating [%s] set', dataset.name)
+
     cum_oracle_bleu = 0.0
     cum_oracle_acc = 0.0
     cum_bleu = 0.0
@@ -58,20 +65,36 @@ def evaluate_decode_results(dataset, decode_results):
         refer_tokens = tokenize(refer_source)
 
         decode_cands = decode_results[eid]
-        decode_cand = decode_cands[3]
+        if len(decode_cands) == 0:
+            continue
+
+        decode_cand = decode_cands[0]
 
         cid, cand, ast_tree, code = decode_cand
-        predict_tokens = tokenize(code)
+
+        # simple_url_2_re = re.compile('_STR:0_', re.))
+        try:
+            predict_tokens = tokenize(code)
+        except:
+            logging.error('error in tokenizing [%s]', code)
+            continue
 
         if refer_tokens == predict_tokens:
             cum_acc += 1
+
+            if verbose:
+                f.write('-' * 60 + '\n')
+                f.write('raw_id: %d\n' % example.raw_id)
+                f.write(code + '\n')
+                f.write('-' * 60 + '\n')
 
         all_references.append([refer_tokens])
         all_predictions.append(predict_tokens)
 
         score = sentence_bleu([refer_tokens], predict_tokens, smoothing_function=sm.method3)
-        print 'raw_id: %d, score: %f' % (example.raw_id, score)
-        # print code
+        if verbose:
+            print 'raw_id: %d, score: %f' % (example.raw_id, score)
+
         cum_bleu += score
 
         # compute oracle
@@ -87,15 +110,34 @@ def evaluate_decode_results(dataset, decode_results):
             if predict_tokens == refer_tokens:
                 cur_oracle_acc = 1
 
-            score = sentence_bleu([refer_tokens], predict_tokens, smoothing_function=sm.method3)
+            try:
+                score = sentence_bleu([refer_tokens], predict_tokens, smoothing_function=sm.method3)
+            except:
+                print "Exception:"
+                print '-' * 60
+                print predict_tokens
+                print refer_tokens
+                traceback.print_exc(file=sys.stdout)
+                print '-' * 60
+
             if score > best_score:
                 best_score = score
 
         cum_oracle_bleu += best_score
         cum_oracle_acc += cur_oracle_acc
 
+    cum_bleu /= dataset.count
+    cum_acc /= dataset.count
+    cum_oracle_bleu /= dataset.count
+    cum_oracle_acc /= dataset.count
+
     print 'corpus level bleu: %f' % corpus_bleu(all_references, all_predictions, smoothing_function=sm.method3)
-    print 'sentence level bleu: %f' % (cum_bleu / dataset.count)
-    print 'accuracy: %f' % (cum_acc / dataset.count)
-    print 'oracle bleu: %f' % (cum_oracle_bleu / dataset.count)
-    print 'oracle accuracy: %f' % (cum_oracle_acc / dataset.count)
+    print 'sentence level bleu: %f' % cum_bleu
+    print 'accuracy: %f' % cum_acc
+    print 'oracle bleu: %f' % cum_oracle_bleu
+    print 'oracle accuracy: %f' % cum_oracle_acc
+
+    if verbose:
+        f.close()
+
+    return cum_bleu, cum_acc
