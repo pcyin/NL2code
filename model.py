@@ -20,6 +20,7 @@ from config import *
 from grammar import *
 from parse import *
 from tree import *
+from util import is_numeric
 from components import Hyp, PointerNet
 
 
@@ -126,10 +127,10 @@ class Model:
         train_inputs = [query_tokens, tgt_action_seq, tgt_action_seq_type]
         optimizer = optimizers.get('adam')
         updates, grads = optimizer.get_updates(self.params, loss)
-        self.train_func = theano.function(train_inputs,
-                                          [loss, tgt_action_seq_type, tgt_action_seq,
-                                           rule_tgt_prob, vocab_tgt_prob, copy_tgt_prob,
-                                           copy_prob, terminal_gen_action_prob],
+        self.train_func = theano.function(train_inputs, [loss],
+                                          # [loss, tgt_action_seq_type, tgt_action_seq,
+                                          #  rule_tgt_prob, vocab_tgt_prob, copy_tgt_prob,
+                                          #  copy_prob, terminal_gen_action_prob],
                                           updates=updates)
 
         self.build_decoder(query_tokens, query_embed, query_token_embed_mask)
@@ -268,6 +269,7 @@ class Model:
                 #     print 'Top Hyp: %s' % hyp.tree.__repr__()
 
                 frontier_nt = hyp.frontier_nt()
+                hyp_frontier_nts.append(frontier_nt)
                 # we have a completed hyp
                 if frontier_nt is None:
                     # hyp.score /= t
@@ -317,8 +319,6 @@ class Model:
 
                     word_gen_hyp_ids.append(k)
 
-                hyp_frontier_nts.append(frontier_nt)
-
             # prune the hyp space
             if completed_hyp_num >= beam_size:
                 break
@@ -338,6 +338,7 @@ class Model:
 
             top_cand_ids = (-cand_scores).argsort()[:beam_size - completed_hyp_num]
 
+            # expand_cand_num = 0
             for cand_id in top_cand_ids:
                 # cand is rule application
                 if cand_id < rule_apply_cand_num:
@@ -358,16 +359,21 @@ class Model:
 
                     new_hyp_samples.append(new_hyp)
                 else:
+                    tid = (cand_id - rule_apply_cand_num) % word_prob.shape[1]
                     word_gen_hyp_id = (cand_id - rule_apply_cand_num) / word_prob.shape[1]
                     hyp_id = word_gen_hyp_ids[word_gen_hyp_id]
-                    hyp = hyp_samples[hyp_id]
-                    tid = (cand_id - rule_apply_cand_num) % word_prob.shape[1]
-                    new_hyp_score = word_gen_cand_scores[word_gen_hyp_id, tid]
 
                     if tid == unk:
                         token = unk_words[word_gen_hyp_id]
                     else:
                         token = terminal_vocab.id_token_map[tid]
+
+                    # frontier_nt = hyp_frontier_nts[hyp_id]
+                    # if frontier_nt.type == int and (not (is_numeric(token) or token == '<eos>')):
+                    #     continue
+
+                    hyp = hyp_samples[hyp_id]
+                    new_hyp_score = word_gen_cand_scores[word_gen_hyp_id, tid]
 
                     new_tree = hyp.tree.copy()
                     new_hyp = Hyp(new_tree)
@@ -379,6 +385,10 @@ class Model:
                     new_hyp.action_embed = vocab_embedding[tid]
 
                     new_hyp_samples.append(new_hyp)
+
+                # expand_cand_num += 1
+                # if expand_cand_num >= beam_size - completed_hyp_num:
+                #     break
 
                 # cand is word generation
 

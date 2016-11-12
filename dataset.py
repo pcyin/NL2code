@@ -49,7 +49,7 @@ class Vocab(object):
         if item in self.token_id_map:
             return self.token_id_map[item]
 
-        logging.info('encounter one unknown word [%s]' % item)
+        logging.debug('encounter one unknown word [%s]' % item)
         return self.token_id_map['<unk>']
 
     def __contains__(self, item):
@@ -136,6 +136,11 @@ class DataEntry:
 
         return self._data
 
+    def copy(self):
+        e = DataEntry(self.raw_id, self.query, self.parse_tree, self.actions)
+
+        return e
+
 
 class DataSet:
     def __init__(self, annot_vocab, terminal_vocab, grammar, name='train_data'):
@@ -148,13 +153,14 @@ class DataSet:
 
     def add(self, example):
         example.eid = len(self.examples)
+        example.dataset = self
         self.examples.append(example)
 
     def get_dataset_by_ids(self, ids, name):
         dataset = DataSet(self.annot_vocab, self.terminal_vocab,
                           self.grammar, name)
         for eid in ids:
-            example_copy = copy.deepcopy(self.examples[eid])
+            example_copy = self.examples[eid].copy()
             dataset.add(example_copy)
 
         for k, v in self.data_matrix.iteritems():
