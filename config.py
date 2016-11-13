@@ -12,16 +12,25 @@ POINTER_NET_HIDDEN_DIM = 100
 MAX_QUERY_LENGTH = 70
 MAX_EXAMPLE_ACTION_NUM = 100
 
-EPOCH_NUM = 100
+# training
+TRAIN_PATIENCE = 10
+MAX_EPOCH = 30
 BATCH_SIZE = 10
+VALID_PER_MINIBATCH = 4000
+SAVE_PER_MINIBATCH = 4000
+
+# decoding
+BEAM_SIZE = 50
+DECODE_MAX_TIME_STEP = 100
+
+from collections import OrderedDict
+config_info = OrderedDict([(v, globals()[v]) for v in dir() if not v.startswith('__')])
 
 # define actions
 APPLY_RULE = 0
 GEN_TOKEN = 1
 COPY_TOKEN = 2
 GEN_COPY_TOKEN = 3
-
-config_info = dict([(v, globals()[v]) for v in dir() if not v.startswith('__')])
 
 ACTION_NAMES = {APPLY_RULE: 'APPLY_RULE',
                 GEN_TOKEN: 'GEN_TOKEN',
