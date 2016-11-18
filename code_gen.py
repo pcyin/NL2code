@@ -9,6 +9,7 @@ from vprof import profiler
 
 from model import Model
 from dataset import DataEntry, DataSet, Vocab, Action
+import config
 from learner import Learner
 from evaluation import *
 from decoder import decode_dataset
@@ -44,12 +45,15 @@ def parse_args():
 if __name__ == '__main__':
     init_logging('parser.log', logging.INFO)
     args = parse_args()
+    # if args.conf:
+    #     logging.info('use external config file: %s', args.conf)
+    #     execfile(args.conf)
 
     logging.info('current config: %s', config_info)
 
-    # np.random.seed(1231)
+    np.random.seed(181783)
 
-    dataset_file = 'django.cleaned.dataset.bin'
+    dataset_file = 'data/django.cleaned.dataset.freq5.bin'
 
     if args.data:
         dataset_file = args.data
@@ -57,6 +61,9 @@ if __name__ == '__main__':
 
     logging.info('loading dataset [%s]', dataset_file)
     train_data, dev_data, test_data = deserialize_from_file(dataset_file)
+
+    logging.info('source vocab size: %d', train_data.annot_vocab.size)
+    logging.info('target vocab size: %d', train_data.terminal_vocab.size)
 
     if args.operation in ['train', 'decode', 'interactive']:
         model = Model()
@@ -107,7 +114,7 @@ if __name__ == '__main__':
             print example.parse_tree
 
             cand_list = model.decode(example, train_data.grammar, train_data.terminal_vocab,
-                                     beam_size=50, max_time_step=100)
+                                     beam_size=BEAM_SIZE, max_time_step=DECODE_MAX_TIME_STEP)
 
             # serialize_to_file(cand_list, 'cand_hyps.%d.bin' % example.raw_id)
 

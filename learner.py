@@ -80,6 +80,9 @@ class Learner(object):
                     decode_results = decoder.decode_dataset(self.model, self.val_data, verbose=False)
                     bleu, acc = evaluation.evaluate_decode_results(self.val_data, decode_results, verbose=False)
 
+                    logging.info('sentence level bleu: %f', bleu)
+                    logging.info('accuracy: %f', acc)
+
                     history_valid_perf.append(acc)
                     if acc >= np.array(history_valid_perf).max():
                         best_model_params = self.model.pull_params()

@@ -721,11 +721,12 @@ def unescape(text):
         .replace('-``-', '"') \
         .replace('-`-', '\'') \
         .replace('-SP-', ' ') \
-        .replace('-TAB-', '\t') \
-        .replace('-NL-', '\n') \
+        .replace('-TAB-', '\\t') \
+        .replace('-NL-', '\\n') \
         .replace('-LRB-', '(') \
         .replace('-RRB-', ')') \
-        .replace('-BAR-', '|')
+        .replace('-BAR-', '|') \
+        .replace('-NONE-', '')
 
     return text
 
@@ -1001,7 +1002,7 @@ if __name__ == '__main__':
     # ''')
     # print ast.dump(node, annotate_fields=False)
     # print get_tree_str_repr(node)
-    # print parse('for f in sorted ( os . listdir ( self . path ) ) : sum = sum + 1; sum = "(hello there)" ')
+    print parse('sorted(my_dict, key=lambda x: my_dict[x], reverse=True)')
     # print parse('global _standard_context_processors')
 
     # parse_django('/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.code')
@@ -1019,10 +1020,10 @@ if __name__ == '__main__':
 
     from dataset import DataSet, Vocab, DataEntry, Action
     # train_data, dev_data, test_data = deserialize_from_file('django.cleaned.dataset.bin')
-    cand_list = deserialize_from_file('cand_hyps.18771.bin')
-    hyp_tree = cand_list[3].tree
-
-    ast_tree = decode_tree_to_ast(hyp_tree)
-    print astor.to_source(ast_tree)
+    # cand_list = deserialize_from_file('cand_hyps.18771.bin')
+    # hyp_tree = cand_list[3].tree
+    #
+    # ast_tree = decode_tree_to_ast(hyp_tree)
+    # print astor.to_source(ast_tree)
 
     pass

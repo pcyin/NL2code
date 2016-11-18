@@ -10,7 +10,8 @@ def decode_dataset(model, dataset, verbose=True):
     decode_results = []
     cum_num = 0
     for example in dataset.examples:
-        cand_list = model.decode(example, dataset.grammar, dataset.terminal_vocab)
+        cand_list = model.decode(example, dataset.grammar, dataset.terminal_vocab,
+                                 beam_size=BEAM_SIZE, max_time_step=DECODE_MAX_TIME_STEP)
 
         exg_decode_results = []
         for cid, cand in enumerate(cand_list[:10]):

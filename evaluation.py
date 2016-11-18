@@ -1,10 +1,12 @@
 from __future__ import division
 
-from model import *
-import config
 from nltk.translate.bleu_score import sentence_bleu, corpus_bleu, SmoothingFunction
 import logging
 import traceback
+
+from model import *
+from parse import unescape
+import config
 
 
 def evaluate(model, dataset, verbose=True):
@@ -43,15 +45,20 @@ def evaluate(model, dataset, verbose=True):
 def evaluate_decode_results(dataset, decode_results, verbose=True):
     assert dataset.count == len(decode_results)
 
-    f = None
+    f = f_decode = None
     if verbose:
         f = open(dataset.name + '.exact_match', 'w')
+        f_decode = open(dataset.name + '.decode_results.txt', 'w')
+        eid_to_annot = dict()
+        for raw_id, line in enumerate(open('/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.anno')):
+            eid_to_annot[raw_id] = line.strip()
         logging.info('evaluating [%s] set', dataset.name)
 
     cum_oracle_bleu = 0.0
     cum_oracle_acc = 0.0
     cum_bleu = 0.0
     cum_acc = 0.0
+    cum_new_acc = 0.0
     sm = SmoothingFunction()
 
     all_references = []
@@ -84,9 +91,32 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
 
             if verbose:
                 f.write('-' * 60 + '\n')
-                f.write('raw_id: %d\n' % example.raw_id)
+                f.write('example_id: %d\n' % example.raw_id)
                 f.write(code + '\n')
                 f.write('-' * 60 + '\n')
+
+        if verbose:
+            f_decode.write('-' * 60 + '\n')
+            f_decode.write('example_id: %d\n' % example.raw_id)
+            f_decode.write('intent: \n')
+            f_decode.write(eid_to_annot[example.raw_id] + '\n')
+            f_decode.write('reference: \n')
+            f_decode.write(refer_source + '\n')
+            f_decode.write('prediction: \n')
+            f_decode.write(code + '\n')
+            f_decode.write('-' * 60 + '\n')
+
+
+        # if hasattr(example, 'code'):
+        #     ref_code = example.code
+        #     ref_code = astor.to_source(ast.parse(ref_code))
+        #     unescaped_cand_code = unescape(code)
+        #
+        #     refer_tokens2 = tokenize(ref_code)
+        #     unescaped_cand_tokens = tokenize(unescaped_cand_code)
+        #
+        #     if refer_tokens2 == unescaped_cand_tokens:
+        #         cum_new_acc += 1
 
         all_references.append([refer_tokens])
         all_predictions.append(predict_tokens)
@@ -128,16 +158,19 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
 
     cum_bleu /= dataset.count
     cum_acc /= dataset.count
+    cum_new_acc /= dataset.count
     cum_oracle_bleu /= dataset.count
     cum_oracle_acc /= dataset.count
 
     print 'corpus level bleu: %f' % corpus_bleu(all_references, all_predictions, smoothing_function=sm.method3)
     print 'sentence level bleu: %f' % cum_bleu
     print 'accuracy: %f' % cum_acc
+    print 'accuracy with original ref: %f' % cum_new_acc
     print 'oracle bleu: %f' % cum_oracle_bleu
     print 'oracle accuracy: %f' % cum_oracle_acc
 
     if verbose:
         f.close()
+        f_decode.close()
 
     return cum_bleu, cum_acc

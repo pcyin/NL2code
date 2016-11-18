@@ -1,3 +1,4 @@
+from __future__ import division
 import copy
 
 import nltk
@@ -95,7 +96,7 @@ def tokenize(str):
     return nltk.word_tokenize(str)
 
 
-def gen_vocab(tokens, vocab_size=3000):
+def gen_vocab(tokens, vocab_size=3000, freq_cutoff=5):
     word_freq = defaultdict(int)
 
     for token in tokens:
@@ -103,8 +104,8 @@ def gen_vocab(tokens, vocab_size=3000):
 
     print 'total num. of tokens: %d' % len(word_freq)
 
-    words_freq_cutoff = [w for w in word_freq if word_freq[w] >= 2]
-    print 'num. of words appear at least twice: %d' % len(words_freq_cutoff)
+    words_freq_cutoff = [w for w in word_freq if word_freq[w] >= freq_cutoff]
+    print 'num. of words appear at least %d: %d' % (freq_cutoff, len(words_freq_cutoff))
 
     ranked_words = sorted(words_freq_cutoff, key=word_freq.get, reverse=True)[:vocab_size-2]
     ranked_words = set(ranked_words)
@@ -120,12 +121,13 @@ def gen_vocab(tokens, vocab_size=3000):
 
 
 class DataEntry:
-    def __init__(self, raw_id, query, parse_tree, actions):
+    def __init__(self, raw_id, query, parse_tree, code, actions):
         self.raw_id = raw_id
         self.eid = -1
         self.query = query
         self.parse_tree = parse_tree
         self.actions = actions
+        self.code = code
 
     @property
     def data(self):
@@ -137,7 +139,7 @@ class DataEntry:
         return self._data
 
     def copy(self):
-        e = DataEntry(self.raw_id, self.query, self.parse_tree, self.actions)
+        e = DataEntry(self.raw_id, self.query, self.parse_tree, self.code, self.actions)
 
         return e
 
@@ -314,7 +316,7 @@ def parse_django_dataset():
     data = preprocess_dataset(annot_file, code_file)
 
     annot_tokens = list(chain(*[e['query_tokens'] for e in data]))
-    annot_vocab = gen_vocab(annot_tokens, vocab_size=5980)
+    annot_vocab = gen_vocab(annot_tokens, vocab_size=5000, freq_cutoff=5) # gen_vocab(annot_tokens, vocab_size=5980)
 
     terminal_token_seq = []
     empty_actions_count = 0
@@ -357,13 +359,15 @@ def parse_django_dataset():
                     assert len(terminal_token) > 0
                     terminal_token_seq.append(terminal_token)
 
-    terminal_vocab = gen_vocab(terminal_token_seq, vocab_size=4830)
+    terminal_vocab = gen_vocab(terminal_token_seq, vocab_size=4830, freq_cutoff=5)
 
     train_data = DataSet(annot_vocab, terminal_vocab, grammar, 'train_data')
     dev_data = DataSet(annot_vocab, terminal_vocab, grammar, 'dev_data')
     test_data = DataSet(annot_vocab, terminal_vocab, grammar, 'test_data')
 
     all_examples = []
+
+    can_fully_gen_num = 0
 
     # second pass
     for entry in data:
@@ -376,6 +380,20 @@ def parse_django_dataset():
         rule_list = parse_tree.get_rule_list(include_leaf=True, leaf_val=True)
 
         actions = []
+
+        can_fully_gen = True
+
+        import astor
+        from parse import code_to_ast
+        ref_code = astor.to_source(code_to_ast(code)).replace('\"','\'')
+        ref_code2 = unescape(astor.to_source(tree_to_ast(parse_tree)))
+
+        if ref_code != ref_code2:
+            print '*' * 60
+            print idx
+            print ref_code
+            print ref_code2
+            print '*' * 60
 
         for rule in rule_list:
             if not is_builtin_type(rule.parent.type):
@@ -411,6 +429,10 @@ def parse_django_dataset():
                     # could be unk!
                     if tok_src_idx < 0 or tok_src_idx >= MAX_QUERY_LENGTH:
                         action = Action(GEN_TOKEN, terminal_token)
+                        if terminal_token not in terminal_vocab:
+                            if terminal_token not in query_tokens:
+                                # print terminal_token
+                                can_fully_gen = False
                     else:  # copy
                         if term_tok_id != terminal_vocab.unk:
                             d = {'source_idx': tok_src_idx, 'literal': terminal_token}
@@ -427,7 +449,10 @@ def parse_django_dataset():
             empty_actions_count += 1
             continue
 
-        example = DataEntry(idx, query_tokens, parse_tree, actions)
+        example = DataEntry(idx, query_tokens, parse_tree, code, actions)
+
+        if can_fully_gen:
+            can_fully_gen_num += 1
 
         # train, valid, test
         if 0 <= idx < 16000:
@@ -446,6 +471,9 @@ def parse_django_dataset():
     serialize_to_file([len(e.query) for e in all_examples], 'query.len')
     serialize_to_file([len(e.actions) for e in all_examples], 'actions.len')
 
+    logging.info('examples that can be fully reconstructed: %d/%d=%f',
+                 can_fully_gen_num, len(all_examples),
+                 can_fully_gen_num / len(all_examples))
     logging.info('empty_actions_count: %d', empty_actions_count)
     logging.info('max_query_len: %d', max_query_len)
     logging.info('max_actions_len: %d', max_actions_len)
@@ -454,7 +482,7 @@ def parse_django_dataset():
     dev_data.init_data_matrices()
     test_data.init_data_matrices()
 
-    serialize_to_file((train_data, dev_data, test_data), 'django.cleaned.dataset.bin')
+    # serialize_to_file((train_data, dev_data, test_data), 'django.cleaned.dataset.bin')
 
     return train_data, dev_data, test_data
 
@@ -591,6 +619,7 @@ def preprocess_dataset(annot_file, code_file):
     serialize_to_file(examples, 'django.cleaned.bin')
 
     print 'error num: %d' % err_num
+    print 'preprocess_dataset: cleaned example num: %d' % len(examples)
 
     return examples
 

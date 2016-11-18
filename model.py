@@ -1,5 +1,6 @@
 import theano
 import theano.tensor as T
+from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 import numpy as np
 
 from collections import OrderedDict
@@ -8,9 +9,8 @@ import copy
 import heapq
 
 from nn.layers.embeddings import Embedding
-from nn.layers.core import Dense
+from nn.layers.core import Dense, Dropout, WordDropout
 from nn.layers.recurrent import BiLSTM, LSTM, CondAttLSTM
-from nn.utils.theano_utils import ndim_itensor, tensor_right_shift, ndim_tensor
 import nn.optimizers as optimizers
 import nn.initializations as initializations
 from nn.activations import softmax
@@ -51,6 +51,8 @@ class Model:
                       self.decoder_lstm.params + self.src_ptr_net.params + self.terminal_gen_softmax.params + \
                       [self.rule_embedding_W, self.rule_embedding_b, self.vocab_embedding_W, self.vocab_embedding_b]
 
+        self.srng = RandomStreams()
+
     def build(self):
         # (batch_size, max_example_action_num, action_type)
         tgt_action_seq = ndim_itensor(3, 'tgt_action_seq')
@@ -65,6 +67,10 @@ class Model:
         # (batch_size, max_query_length)
         query_token_embed, query_token_embed_mask = self.query_embedding(query_tokens, mask_zero=True)
 
+        if WORD_DROPOUT > 0:
+            logging.info('used word dropout for source, p = %f', WORD_DROPOUT)
+            query_token_embed, query_token_embed_intact = WordDropout(WORD_DROPOUT, self.srng)(query_token_embed, False)
+
         batch_size = tgt_action_seq.shape[0]
         max_example_action_num = tgt_action_seq.shape[1]
 
@@ -77,12 +83,19 @@ class Model:
         tgt_action_seq_embed_tm1 = tensor_right_shift(tgt_action_seq_embed)
 
         # (batch_size, max_query_length, query_embed_dim)
-        query_embed = self.query_encoder_lstm(query_token_embed, mask=query_token_embed_mask)
+        query_embed = self.query_encoder_lstm(query_token_embed, mask=query_token_embed_mask,
+                                              dropout=DECODER_DROPOUT, srng=self.srng)
         
         # (batch_size, max_example_action_num, lstm_hidden_state)
         decoder_hidden_states, _, ctx_vectors = self.decoder_lstm(tgt_action_seq_embed_tm1,
                                                                   context=query_embed,
-                                                                  context_mask=query_token_embed_mask)
+                                                                  context_mask=query_token_embed_mask,
+                                                                  dropout=DECODER_DROPOUT,
+                                                                  srng=self.srng)
+
+        # if DECODER_DROPOUT > 0:
+        #     logging.info('used dropout for decoder output, p = %f', DECODER_DROPOUT)
+        #     decoder_hidden_states = Dropout(DECODER_DROPOUT, self.srng)(decoder_hidden_states)
 
         # (batch_size, max_example_action_num, rule_num)
         rule_predict = softmax(T.dot(decoder_hidden_states, T.transpose(self.rule_embedding_W)) + self.rule_embedding_b)
@@ -133,9 +146,12 @@ class Model:
                                           #  copy_prob, terminal_gen_action_prob],
                                           updates=updates)
 
-        self.build_decoder(query_tokens, query_embed, query_token_embed_mask)
+        if WORD_DROPOUT > 0:
+            self.build_decoder(query_tokens, query_token_embed_intact, query_token_embed_mask)
+        else:
+            self.build_decoder(query_tokens, query_token_embed, query_token_embed_mask)
 
-    def build_decoder(self, query_tokens, query_embed, query_token_embed_mask):
+    def build_decoder(self, query_tokens, query_token_embed, query_token_embed_mask):
         logging.info('building decoder ...')
 
         # (batch_size, decoder_state_dim)
@@ -147,6 +163,9 @@ class Model:
         # (batch_size, decoder_state_dim)
         prev_action_embed = ndim_tensor(2, name='prev_action_embed')
 
+        query_embed = self.query_encoder_lstm(query_token_embed, mask=query_token_embed_mask,
+                                              dropout=DECODER_DROPOUT, train=False)
+
         # (batch_size, 1, decoder_state_dim)
         prev_action_embed_reshaped = prev_action_embed.dimshuffle((0, 'x', 1))
 
@@ -157,9 +176,13 @@ class Model:
                                                                                          init_state=decoder_prev_state,
                                                                                          init_cell=decoder_prev_cell,
                                                                                          context=query_embed,
-                                                                                         context_mask=query_token_embed_mask)
+                                                                                         context_mask=query_token_embed_mask,
+                                                                                         dropout=DECODER_DROPOUT,
+                                                                                         train=False)
 
         decoder_next_state = decoder_next_state_dim3.flatten(2)
+        # decoder_output = decoder_next_state * (1 - DECODER_DROPOUT)
+
         decoder_next_cell = decoder_next_cell_dim3.flatten(2)
 
         rule_prob = softmax(T.dot(decoder_next_state, T.transpose(self.rule_embedding_W)) + self.rule_embedding_b)
@@ -185,7 +208,7 @@ class Model:
 
         self.decoder_func_next_step = theano.function(inputs, outputs)
 
-    def decode(self, example, grammar, terminal_vocab, beam_size=BEAM_SIZE, max_time_step=DECODE_MAX_TIME_STEP):
+    def decode(self, example, grammar, terminal_vocab, beam_size, max_time_step):
         # beam search decoding
 
         eos = 1
@@ -443,4 +466,7 @@ class Model:
                 return 1
             else:
                 logging.info('loading parameter [%s]', p_name)
+                assert np.array_equal(p.shape.eval(), weights_dict[p_name].shape), \
+                    'shape mis-match for [%s]!, %s != %s' % (p_name, p.shape.eval(), weights_dict[p_name].shape)
+
                 p.set_value(weights_dict[p_name])
