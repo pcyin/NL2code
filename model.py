@@ -7,10 +7,11 @@ from collections import OrderedDict
 import logging
 import copy
 import heapq
+import sys
 
 from nn.layers.embeddings import Embedding
 from nn.layers.core import Dense, Dropout, WordDropout
-from nn.layers.recurrent import BiLSTM, LSTM, CondAttLSTM
+from nn.layers.recurrent import BiLSTM, LSTM #, CondAttLSTM
 import nn.optimizers as optimizers
 import nn.initializations as initializations
 from nn.activations import softmax
@@ -21,8 +22,9 @@ from grammar import *
 from parse import *
 from tree import *
 from util import is_numeric
-from components import Hyp, PointerNet
+from components import Hyp, PointerNet, CondAttLSTM
 
+sys.setrecursionlimit(50000)
 
 class Model:
     def __init__(self):
@@ -91,7 +93,8 @@ class Model:
                                                                   context=query_embed,
                                                                   context_mask=query_token_embed_mask,
                                                                   dropout=DECODER_DROPOUT,
-                                                                  srng=self.srng)
+                                                                  srng=self.srng,
+                                                                  timestep=MAX_EXAMPLE_ACTION_NUM)
 
         # if DECODER_DROPOUT > 0:
         #     logging.info('used dropout for decoder output, p = %f', DECODER_DROPOUT)
@@ -178,7 +181,8 @@ class Model:
                                                                                          context=query_embed,
                                                                                          context_mask=query_token_embed_mask,
                                                                                          dropout=DECODER_DROPOUT,
-                                                                                         train=False)
+                                                                                         train=False,
+                                                                                         timestep=1)
 
         decoder_next_state = decoder_next_state_dim3.flatten(2)
         # decoder_output = decoder_next_state * (1 - DECODER_DROPOUT)
