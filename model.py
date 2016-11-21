@@ -93,8 +93,7 @@ class Model:
                                                                   context=query_embed,
                                                                   context_mask=query_token_embed_mask,
                                                                   dropout=DECODER_DROPOUT,
-                                                                  srng=self.srng,
-                                                                  timestep=MAX_EXAMPLE_ACTION_NUM)
+                                                                  srng=self.srng)
 
         # if DECODER_DROPOUT > 0:
         #     logging.info('used dropout for decoder output, p = %f', DECODER_DROPOUT)
@@ -163,8 +162,14 @@ class Model:
         # (batch_size, decoder_state_dim)
         decoder_prev_cell = ndim_tensor(2, name='decoder_prev_cell')
 
+        # (batch_size, n_timestep, decoder_state_dim)
+        hist_h = ndim_tensor(3, name='hist_h')
+
         # (batch_size, decoder_state_dim)
         prev_action_embed = ndim_tensor(2, name='prev_action_embed')
+
+        # ([time_step])
+        time_steps = T.ivector(name='time_steps')
 
         query_embed = self.query_encoder_lstm(query_token_embed, mask=query_token_embed_mask,
                                               dropout=DECODER_DROPOUT, train=False)
@@ -178,11 +183,12 @@ class Model:
         decoder_next_state_dim3, decoder_next_cell_dim3, ctx_vectors = self.decoder_lstm(prev_action_embed_reshaped,
                                                                                          init_state=decoder_prev_state,
                                                                                          init_cell=decoder_prev_cell,
+                                                                                         hist_h=hist_h,
                                                                                          context=query_embed,
                                                                                          context_mask=query_token_embed_mask,
                                                                                          dropout=DECODER_DROPOUT,
                                                                                          train=False,
-                                                                                         timestep=1)
+                                                                                         time_steps=time_steps)
 
         decoder_next_state = decoder_next_state_dim3.flatten(2)
         # decoder_output = decoder_next_state * (1 - DECODER_DROPOUT)
@@ -204,7 +210,7 @@ class Model:
 
         self.decoder_func_init = theano.function(inputs, outputs)
 
-        inputs = [decoder_prev_state, decoder_prev_cell, prev_action_embed,
+        inputs = [time_steps, decoder_prev_state, decoder_prev_cell, hist_h, prev_action_embed,
                   query_embed, query_token_embed_mask]
 
         outputs = [decoder_next_state, decoder_next_cell,
@@ -249,15 +255,26 @@ class Model:
             else: token_set.add(tid)
 
         for t in xrange(max_time_step):
+            hyp_num = len(hyp_samples)
             # print 'time step [%d]' % t
             decoder_prev_state = np.array([hyp.state for hyp in hyp_samples]).astype('float32')
             decoder_prev_cell = np.array([hyp.cell for hyp in hyp_samples]).astype('float32')
+
+            hist_h = np.zeros((hyp_num, max_time_step, LSTM_STATE_DIM)).astype('float32')
+
+            if t > 0:
+                for i, hyp in enumerate(hyp_samples):
+                    hist_h[i, :len(hyp.hist_h), :] = hyp.hist_h
+                    # for j, h in enumerate(hyp.hist_h):
+                    #    hist_h[i, j] = h
+
+            # hist_h = np.stack([np.array(hyp.hist_h) for hyp in hyp_samples]).astype('float32')
             prev_action_embed = np.array([hyp.action_embed for hyp in hyp_samples]).astype('float32')
 
             query_embed_tiled = np.tile(query_embed, [live_hyp_num, 1, 1])
             query_token_embed_mask_tiled = np.tile(query_token_embed_mask, [live_hyp_num, 1])
 
-            inputs = [decoder_prev_state, decoder_prev_cell, prev_action_embed,
+            inputs = [np.array([t], dtype='int32'), decoder_prev_state, decoder_prev_cell, hist_h, prev_action_embed,
                       query_embed_tiled, query_token_embed_mask_tiled]
 
             decoder_next_state, decoder_next_cell, \
@@ -381,6 +398,7 @@ class Model:
 
                     new_hyp.score = new_hyp_score
                     new_hyp.state = copy.copy(decoder_next_state[hyp_id])
+                    new_hyp.hist_h.append(copy.copy(new_hyp.state))
                     new_hyp.cell = copy.copy(decoder_next_cell[hyp_id])
                     new_hyp.action_embed = rule_embedding[rule_id]
 
@@ -408,6 +426,7 @@ class Model:
 
                     new_hyp.score = new_hyp_score
                     new_hyp.state = copy.copy(decoder_next_state[hyp_id])
+                    new_hyp.hist_h.append(copy.copy(new_hyp.state))
                     new_hyp.cell = copy.copy(decoder_next_cell[hyp_id])
                     new_hyp.action_embed = vocab_embedding[tid]
 

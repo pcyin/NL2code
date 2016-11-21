@@ -57,6 +57,7 @@ class Hyp:
             self.tree = tree
 
         self.score = 0.0
+        self.hist_h = []
 
     def __repr__(self):
         return self.tree.__repr__()
@@ -179,11 +180,94 @@ class CondAttLSTM(Layer):
         self.set_name(name)
 
     def _step(self,
-              xi_t, xf_t, xo_t, xc_t, mask_t,
-              h_tm1, c_tm1,
+              t, xi_t, xf_t, xo_t, xc_t, mask_t,
+              h_tm1, c_tm1, hist_h,
+              u_i, u_f, u_o, u_c, c_i, c_f, c_o, c_c,
+              h_i, h_f, h_o, h_c,
+              att_h_w1, att_w2, att_b2,
               context, context_mask, context_att_trans,
-              hist_h, hist_h_att_trans,
               b_u):
+
+        # context: (batch_size, context_size, context_dim)
+
+        # (batch_size, att_layer1_dim)
+        h_tm1_att_trans = T.dot(h_tm1, att_h_w1)
+
+        # h_tm1_att_trans = theano.printing.Print('h_tm1_att_trans')(h_tm1_att_trans)
+
+        # (batch_size, context_size, att_layer1_dim)
+        att_hidden = T.tanh(context_att_trans + h_tm1_att_trans[:, None, :])
+        # (batch_size, context_size, 1)
+        att_raw = T.dot(att_hidden, att_w2) + att_b2
+        att_raw = att_raw.reshape((att_raw.shape[0], att_raw.shape[1]))
+
+        # (batch_size, context_size)
+        ctx_att = T.exp(att_raw - T.max(att_raw, axis=-1, keepdims=True))
+
+        if context_mask:
+            ctx_att = ctx_att * context_mask
+
+        ctx_att = ctx_att / T.sum(ctx_att, axis=-1, keepdims=True)
+        # (batch_size, context_dim)
+        ctx_vec = T.sum(context * ctx_att[:, :, None], axis=1)
+
+        # t = theano.printing.Print('t')(t)
+
+        ##### attention over history #####
+
+        def _attention_over_history():
+            hist_h_mask = T.zeros((hist_h.shape[0], hist_h.shape[1]))
+            hist_h_mask = T.set_subtensor(hist_h_mask[:, T.arange(t)], 1)
+
+            hist_h_att_trans = T.dot(hist_h, self.hatt_hist_W1) + self.hatt_b1
+            h_tm1_hatt_trans = T.dot(h_tm1, self.hatt_h_W1)
+
+            hatt_hidden = T.tanh(hist_h_att_trans + h_tm1_hatt_trans[:, None, :])
+            hatt_raw = T.dot(hatt_hidden, self.hatt_W2) + self.hatt_b2
+            hatt_raw = hatt_raw.reshape((hist_h.shape[0], hist_h.shape[1]))
+            # hatt_raw = theano.printing.Print('hatt_raw')(hatt_raw)
+            hatt_exp = T.exp(hatt_raw - T.max(hatt_raw, axis=-1, keepdims=True)) * hist_h_mask
+            # hatt_exp = theano.printing.Print('hatt_exp')(hatt_exp)
+            # hatt_exp = hatt_exp.flatten(2)
+            h_att_weights = hatt_exp / (T.sum(hatt_exp, axis=-1, keepdims=True) + 1e-7)
+            # h_att_weights = theano.printing.Print('h_att_weights')(h_att_weights)
+
+            # (batch_size, output_dim)
+            _h_ctx_vec = T.sum(hist_h * h_att_weights[:, :, None], axis=1)
+
+            return _h_ctx_vec
+
+        h_ctx_vec = T.switch(t,
+                             _attention_over_history(),
+                             T.zeros_like(h_tm1))
+
+        # h_ctx_vec = theano.printing.Print('h_ctx_vec')(h_ctx_vec)
+
+        ##### attention over history #####
+
+        i_t = self.inner_activation(
+            xi_t + T.dot(h_tm1 * b_u[0], u_i) + T.dot(ctx_vec, c_i) + T.dot(h_ctx_vec, h_i))
+        f_t = self.inner_activation(
+            xf_t + T.dot(h_tm1 * b_u[1], u_f) + T.dot(ctx_vec, c_f) + T.dot(h_ctx_vec, h_f))
+        c_t = f_t * c_tm1 + i_t * self.activation(
+            xc_t + T.dot(h_tm1 * b_u[2], u_c) + T.dot(ctx_vec, c_c) + T.dot(h_ctx_vec, h_c))
+        o_t = self.inner_activation(
+            xo_t + T.dot(h_tm1 * b_u[3], u_o) + T.dot(ctx_vec, c_o) + T.dot(h_ctx_vec, h_o))
+        h_t = o_t * self.activation(c_t)
+
+        h_t = (1 - mask_t) * h_tm1 + mask_t * h_t
+        c_t = (1 - mask_t) * c_tm1 + mask_t * c_t
+
+        new_hist_h = T.set_subtensor(hist_h[:, t, :], h_t)
+
+        return h_t, c_t, ctx_vec, new_hist_h
+
+    def _for_step(self,
+                  xi_t, xf_t, xo_t, xc_t, mask_t,
+                  h_tm1, c_tm1,
+                  context, context_mask, context_att_trans,
+                  hist_h, hist_h_att_trans,
+                  b_u):
 
         # context: (batch_size, context_size, context_dim)
 
@@ -239,10 +323,10 @@ class CondAttLSTM(Layer):
 
         return h_t, c_t, ctx_vec
 
-    def __call__(self, X, context, init_state=None, init_cell=None,
+    def __call__(self, X, context, init_state=None, init_cell=None, hist_h=None,
                  mask=None, context_mask=None,
                  dropout=0, train=True, srng=None,
-                 timestep=1):
+                 time_steps=None):
         assert context_mask.dtype == 'int8', 'context_mask is not int8, got %s' % context_mask.dtype
 
         # (n_timestep, batch_size)
@@ -285,41 +369,37 @@ class CondAttLSTM(Layer):
         else:
             first_cell = T.unbroadcast(alloc_zeros_matrix(X.shape[1], self.output_dim), 1)
 
-        hist_h = []
-        hist_h_att_trans = []
-        ctx_vectors = []
-        cells = []
+        if not hist_h:
+            # (batch_size, n_timestep, output_dim)
+            hist_h = alloc_zeros_matrix(X.shape[1], X.shape[0], self.output_dim)
 
-        prev_state = first_state
-        prev_cell = first_cell
+        if train:
+            n_timestep = X.shape[0]
+            time_steps = T.arange(n_timestep)
 
-        for t in xrange(timestep):
-            xi_t = xi[t]
-            xf_t = xf[t]
-            xo_t = xo[t]
-            xc_t = xc[t]
-            mask_t = mask[t]
+        [outputs, cells, ctx_vectors, _], updates = theano.scan(
+            self._step,
+            sequences=[time_steps, xi, xf, xo, xc, mask],
+            outputs_info=[
+                first_state,  # for h
+                first_cell,  # for cell
+                None, # T.unbroadcast(alloc_zeros_matrix(X.shape[1], self.context_dim), 1),  # for ctx vector
+                hist_h,  # for hist_h
+            ],
+            non_sequences=[
+                self.U_i, self.U_f, self.U_o, self.U_c,
+                self.C_i, self.C_f, self.C_o, self.C_c,
+                self.H_i, self.H_f, self.H_o, self.H_c,
+                self.att_h_W1, self.att_W2, self.att_b2,
+                context, context_mask, context_att_trans,
+                B_u
+            ])
 
-            h_t, c_t, ctx_vec = self._step(xi_t, xf_t, xo_t, xc_t, mask_t, prev_state, prev_cell,
-                                           context, context_mask, context_att_trans,
-                                           hist_h, hist_h_att_trans,
-                                           B_u)
-
-            h_att_trans = T.dot(h_t, self.hatt_hist_W1) + self.hatt_b1
-            hist_h_att_trans.append(h_att_trans)
-
-            hist_h.append(h_t)
-            cells.append(c_t)
-            ctx_vectors.append(ctx_vec)
-            prev_state = h_t
-            prev_cell = c_t
-
-        outputs = T.stack(hist_h).dimshuffle((1, 0, 2))
-        ctx_vectors = T.stack(ctx_vectors).dimshuffle((1, 0, 2))
-        cells = T.stack(cells).dimshuffle((1, 0, 2))
+        outputs = outputs.dimshuffle((1, 0, 2))
+        ctx_vectors = ctx_vectors.dimshuffle((1, 0, 2))
+        cells = cells.dimshuffle((1, 0, 2))
 
         return outputs, cells, ctx_vectors
-        # return outputs[-1]
 
     def get_mask(self, mask, X):
         if mask is None:
