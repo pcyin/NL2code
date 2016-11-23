@@ -769,7 +769,7 @@ def ast_to_tree(node):
     # if it's a compositional AST node with empty fields
     if is_compositional_leaf(node):
         epsilon = Tree('epsilon')
-        tree.children.append(epsilon)
+        tree.add_child(epsilon)
 
         return tree
 
@@ -791,10 +791,10 @@ def ast_to_tree(node):
 
         if isinstance(field_value, ast.AST):
             child = ast_to_tree(field_value)
-            tree.children.append(Tree(field_type, field_name, child))
+            tree.add_child(Tree(field_type, field_name, child))
         elif isinstance(field_value, str) or isinstance(field_value, int) or isinstance(field_value, float):
             child = Tree(type(field_value), field_name, ast_to_tree(field_value))
-            tree.children.append(child)
+            tree.add_child(child)
         elif is_list:
             if len(field_value) > 0:
                 child = Tree(typename(field_type) + '*', field_name)
@@ -802,13 +802,13 @@ def ast_to_tree(node):
                 # child.children.append(list_node)
                 for n in field_value:
                     if field_type in {ast.comprehension, ast.excepthandler, ast.arguments, ast.keyword, ast.alias}:
-                        child.children.append(ast_to_tree(n))
+                        child.add_child(ast_to_tree(n))
                     else:
                         intermediate_node = Tree(field_type)
-                        intermediate_node.children.append(ast_to_tree(n))
-                        child.children.append(intermediate_node)
+                        intermediate_node.add_child(ast_to_tree(n))
+                        child.add_child(intermediate_node)
 
-                tree.children.append(child)
+                tree.add_child(child)
         else:
             raise RuntimeError('unknown AST node field!')
 
@@ -816,9 +816,15 @@ def ast_to_tree(node):
 
 
 def parse(code):
+    """
+    parse a python code into a tree structure
+    code -> AST tree -> AST tree to internal tree structure
+    """
     root_node = code_to_ast(code)
 
     tree = ast_to_tree(root_node.body[0])
+
+    tree = add_root(tree)
 
     return tree
 
@@ -862,7 +868,7 @@ def parse_django(code_file):
             if not is_terminal_type(leaf.type):
                 print parse_tree
 
-        parse_tree = add_root(parse_tree)
+        # parse_tree = add_root(parse_tree)
 
         parse_trees.append(parse_tree)
 
@@ -905,6 +911,10 @@ def parse_django(code_file):
 def tree_to_ast(tree):
     node_type = tree.type
     node_label = tree.label
+
+    # remove root
+    if node_type == 'root':
+        return tree_to_ast(tree.children[0])
 
     if tree.is_leaf and is_builtin_type(node_type):
         return node_label
@@ -1002,16 +1012,17 @@ if __name__ == '__main__':
     # ''')
     # print ast.dump(node, annotate_fields=False)
     # print get_tree_str_repr(node)
-    print parse('sorted(my_dict, key=lambda x: my_dict[x], reverse=True)')
+    # print parse('sorted(my_dict, key=lambda x: my_dict[x], reverse=True)')
     # print parse('global _standard_context_processors')
 
     # parse_django('/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.code')
 
     # code = 'sum = True'
-    # """sorted(my_dict, key=lambda x: my_dict[x], reverse=True)"""
+    code = """sorted(my_dict, key=lambda x: my_dict[x], reverse=True)"""
     # # # # gold_ast_node = code_to_ast(code)
-    # parse_tree = parse(code)
-    # # parse_tree.get_rule_list(include_leaf=False)
+    parse_tree = parse(code)
+    parse_tree = add_root(parse_tree)
+    rule_list = parse_tree.get_rule_list()
     # print parse_tree
     # ast_tree = tree_to_ast(parse_tree)
     # # # # #

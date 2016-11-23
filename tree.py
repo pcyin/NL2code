@@ -5,7 +5,7 @@ import cPickle
 from grammar import *
 
 
-class Tree:
+class Tree(object):
     def __init__(self, type, label=None, children=None, holds_value=False):
         if isinstance(type, str):
             if type in ast_types:
@@ -14,12 +14,13 @@ class Tree:
         self.type = type
         self.label = label
         self.holds_value = holds_value
+        self.parent = None
 
         self.children = list()
         if children and isinstance(children, list):
             self.children.extend(children)
         elif children and isinstance(children, Tree):
-            self.children.append(children)
+            self.add_child(children)
 
     @property
     def is_leaf(self):
@@ -39,22 +40,16 @@ class Tree:
     def node(self):
         return Node(self.type, self.label)
 
-    def apply_rule(self, rule):
-        assert rule.parent.type == self.type
+    def add_child(self, child):
+        child.parent = self
+        self.children.append(child)
 
-        for child_node in rule.children:
-            child = Tree(child_node.type, child_node.label)
-            if is_builtin_type(rule.parent.type):
-                child.label = None
-                child.holds_value = True
+    def get_child_id(self, child):
+        for i, _child in enumerate(self.children):
+            if child == _child:
+                return i
 
-            self.children.append(child)
-
-    def append_token(self, token):
-        if self.label is None:
-            self.label = token
-        else:
-            self.label += token
+        raise KeyError
 
     def __repr__(self):
         repr_str = ''
@@ -83,7 +78,26 @@ class Tree:
 
         return leaves
 
-    def get_rule_list(self, include_leaf=True, leaf_val=False):
+    def to_rule(self, include_terminal_val=True):
+        src = Node(self.type, None)
+        targets = []
+        for child in self.children:
+            if is_builtin_type(self.type) and not include_terminal_val:
+                child_label = 'val'
+            else:
+                child_label = child.label
+
+            tgt = Node(child.type, child_label)
+            targets.append(tgt)
+
+        rule = TypedRule(src, targets, tree=self)
+
+        return rule
+
+    def get_rule_list(self, parent_pos=-1, prev_pos=-1, include_leaf=True, leaf_val=False):
+        """
+        get the depth-first, left-to-right sequence of rule applications
+        """
         if self.is_preterminal:
             if include_leaf:
                 label = None
@@ -91,10 +105,11 @@ class Tree:
                     if leaf_val: label = self.children[0].label
                     else: label = 'val'
 
-                return [TypedRule(Node(self.type, None), Node(self.children[0].type, label))]  # self.children[0].label
-            return []
+                return [TypedRule(Node(self.type, None), Node(self.children[0].type, label), tree=self)], \
+                       [prev_pos + 1], [parent_pos]  # self.children[0].label
+            return [], [], []
         elif self.is_leaf:
-            return []
+            return [], [], []
 
         src = Node(self.type, None)
         targets = []
@@ -102,13 +117,25 @@ class Tree:
             tgt = Node(child.type, child.label)
             targets.append(tgt)
 
-        rule = TypedRule(src, targets)
+        rule = TypedRule(src, targets, tree=self)
 
         rule_list = [rule]
-        for child in self.children:
-            rule_list.extend(child.get_rule_list(include_leaf=include_leaf, leaf_val=leaf_val))
+        rule_pos = prev_pos + 1
+        rule_pos_list = [rule_pos]
+        rule_par_pos_list = [parent_pos]
 
-        return rule_list
+        cur_pos = rule_pos
+        for child in self.children:
+            child_rule_list, child_rule_pos, child_rule_par_pos = \
+                child.get_rule_list(parent_pos=rule_pos, prev_pos=cur_pos, include_leaf=include_leaf, leaf_val=leaf_val)
+
+            rule_list.extend(child_rule_list)
+            rule_pos_list.extend(child_rule_pos)
+            rule_par_pos_list.extend(child_rule_par_pos)
+
+            cur_pos += len(child_rule_list)
+
+        return rule_list, rule_pos_list, rule_par_pos_list
 
     def copy(self):
         # if not hasattr(self, '_dump'):
@@ -124,7 +151,7 @@ class Tree:
             return new_tree
 
         for child in self.children:
-            new_tree.children.append(child.copy())
+            new_tree.add_child(child.copy())
 
         return new_tree
 
@@ -139,9 +166,26 @@ class Tree:
 
         return node_num
 
+class DecodeTree(Tree):
+    def __init__(self, type, label=None, children=None, holds_value=False, t=-1):
+        super(DecodeTree, self).__init__(type, label, children, holds_value)
+
+        # record the time step when this subtree is created from a rule application
+        self.t = t
+
+    def copy(self):
+        new_tree = DecodeTree(self.type, self.label, holds_value=self.holds_value, t=self.t)
+        if self.is_leaf:
+            return new_tree
+
+        for child in self.children:
+            new_tree.add_child(child.copy())
+
+        return new_tree
+
 def add_root(tree):
     root_node = Tree('root')
-    root_node.children.append(tree)
+    root_node.add_child(tree)
 
     return root_node
 
@@ -197,7 +241,7 @@ def get_grammar(parse_trees):
     # rule_num_dist = defaultdict(int)
 
     for parse_tree in parse_trees:
-        parse_tree_rules = parse_tree.get_rule_list(include_leaf=True)  # extract_rule(parse_tree)
+        parse_tree_rules, _, _ = parse_tree.get_rule_list(include_leaf=True)  # extract_rule(parse_tree)
         # len_span = len(parse_tree_rules) / 10
         # rule_num_dist['%d ~ %d' % (10 * len_span, 10 * len_span + 10)] += 1
         for rule in parse_tree_rules:
@@ -212,16 +256,16 @@ def get_grammar(parse_trees):
     rules = list(sorted(rules, key=lambda x: x.__repr__()))
     grammar = Grammar(rules)
 
-    print 'num. rules: %d' % len(rules)
+    # print 'num. rules: %d' % len(rules)
 
-    # get unique symbols
-    symbols = set()
-    for rule in rules:
-        symbols.add(rule.parent)
-        for child in rule.children:
-            symbols.add(child)
-
-    print 'num. of symbols: %d' % len(symbols)
+    # get unique symbols, we only look at its type
+    # symbol_types = set()
+    # for rule in rules:
+    #     symbol_types.add(rule.parent.type)
+    #     for child in rule.children:
+    #         symbol_types.add(child.type)
+    #
+    # print 'num. of symbol types: %d' % len(symbol_types)
 
     return grammar
 

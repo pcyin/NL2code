@@ -79,15 +79,19 @@ if __name__ == '__main__':
         learner.train()
 
     if args.operation == 'decode':
-        short_examples = [e for e in test_data.examples if e.parse_tree.size <= 2]
-        for e in short_examples:
-            print e.parse_tree
-        print 'short examples num: ', len(short_examples)
+        # ==========================
+        # investigate short examples
+        # ==========================
+
+        # short_examples = [e for e in test_data.examples if e.parse_tree.size <= 2]
+        # for e in short_examples:
+        #     print e.parse_tree
+        # print 'short examples num: ', len(short_examples)
 
         # dataset = test_data # test_data.get_dataset_by_ids([1,2,3,4,5,6,7,8,9,10], name='sample')
         # cProfile.run('decode_dataset(model, dataset)', sort=2)
-        dataset = eval(args.type)
 
+        dataset = eval(args.type)
         decode_results = decode_dataset(model, dataset)
         serialize_to_file(decode_results, args.saveto)
 

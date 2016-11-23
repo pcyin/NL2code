@@ -184,7 +184,8 @@ class DataSet:
             return self.examples[ids]
 
     def get_prob_func_inputs(self, ids):
-        order = ['query_tokens', 'tgt_action_seq', 'tgt_action_seq_type']
+        order = ['query_tokens', 'tgt_action_seq', 'tgt_action_seq_type',
+                 'tgt_node_seq', 'tgt_par_rule_seq', 'tgt_par_t_seq']
 
         return [self.data_matrix[x][ids] for x in order]
 
@@ -197,6 +198,9 @@ class DataSet:
         # np.max([len(e.rules) for e in self.examples])
 
         query_tokens = self.data_matrix['query_tokens'] = np.zeros((self.count, MAX_QUERY_LENGTH), dtype='int32')
+        tgt_node_seq = self.data_matrix['tgt_node_seq'] = np.zeros((self.count, MAX_EXAMPLE_ACTION_NUM), dtype='int32')
+        tgt_par_rule_seq = self.data_matrix['tgt_par_rule_seq'] = np.zeros((self.count, MAX_EXAMPLE_ACTION_NUM), dtype='int32')
+        tgt_par_t_seq = self.data_matrix['tgt_par_t_seq'] = np.zeros((self.count, MAX_EXAMPLE_ACTION_NUM), dtype='int32')
         tgt_action_seq = self.data_matrix['tgt_action_seq'] = np.zeros((self.count, MAX_EXAMPLE_ACTION_NUM, 3), dtype='int32')
         tgt_action_seq_type = self.data_matrix['tgt_action_seq_type'] = np.zeros((self.count, MAX_EXAMPLE_ACTION_NUM, 3), dtype='int32')
 
@@ -211,31 +215,52 @@ class DataSet:
 
             assert len(exg_action_seq) > 0
 
-            for rid, action in enumerate(exg_action_seq):
+            for t, action in enumerate(exg_action_seq):
                 if action.act_type == APPLY_RULE:
-                    rule = action.data
-                    tgt_action_seq[eid, rid, 0] = self.grammar.rule_to_id[rule]
-                    tgt_action_seq_type[eid, rid, 0] = 1
+                    rule = action.data['rule']
+                    tgt_action_seq[eid, t, 0] = self.grammar.rule_to_id[rule]
+                    tgt_action_seq_type[eid, t, 0] = 1
                 elif action.act_type == GEN_TOKEN:
-                    token = action.data
+                    token = action.data['literal']
                     token_id = terminal_vocab[token]
-                    tgt_action_seq[eid, rid, 1] = token_id
-                    tgt_action_seq_type[eid, rid, 1] = 1
+                    tgt_action_seq[eid, t, 1] = token_id
+                    tgt_action_seq_type[eid, t, 1] = 1
                 elif action.act_type == COPY_TOKEN:
                     src_token_idx = action.data['source_idx']
-                    tgt_action_seq[eid, rid, 2] = src_token_idx
-                    tgt_action_seq_type[eid, rid, 2] = 1
+                    tgt_action_seq[eid, t, 2] = src_token_idx
+                    tgt_action_seq_type[eid, t, 2] = 1
                 elif action.act_type == GEN_COPY_TOKEN:
                     token = action.data['literal']
                     token_id = terminal_vocab[token]
-                    tgt_action_seq[eid, rid, 1] = token_id
-                    tgt_action_seq_type[eid, rid, 1] = 1
+                    tgt_action_seq[eid, t, 1] = token_id
+                    tgt_action_seq_type[eid, t, 1] = 1
 
                     src_token_idx = action.data['source_idx']
-                    tgt_action_seq[eid, rid, 2] = src_token_idx
-                    tgt_action_seq_type[eid, rid, 2] = 1
+                    tgt_action_seq[eid, t, 2] = src_token_idx
+                    tgt_action_seq_type[eid, t, 2] = 1
                 else:
                     raise RuntimeError('wrong action type!')
+
+                # parent information
+                rule = action.data['rule']
+                tree = rule.tree
+                parent_tree = tree.parent
+
+                if action.act_type == APPLY_RULE:
+                    tgt_node_seq[eid, t] = self.grammar.get_node_type_id(rule.parent)
+                    if parent_tree:
+                        parent_rule = parent_tree.to_rule()
+                        tgt_par_rule_seq[eid, t] = self.grammar.rule_to_id[parent_rule]
+                    else:
+                        assert t == 0
+                        tgt_par_rule_seq[eid, t] = -1
+                else:
+                    tgt_par_rule_seq[eid, t] = self.grammar.rule_to_id[rule]
+                    tgt_node_seq[eid, t] = self.grammar.get_node_type_id(rule.children[0].type)
+
+                # parent hidden states
+                parent_t = action.data['parent_t']
+                tgt_par_t_seq[eid, t] = parent_t
 
             example.dataset = self
 
@@ -343,7 +368,7 @@ def parse_django_dataset():
         code = entry['code']
 
         parse_tree = parse(code)
-        rule_list = parse_tree.get_rule_list(include_leaf=True, leaf_val=True)
+        rule_list, rule_pos_list, par_rule_pos_list = parse_tree.get_rule_list(include_leaf=True, leaf_val=True)
 
         for rule in rule_list:
             if is_builtin_type(rule.parent.type):
@@ -377,35 +402,53 @@ def parse_django_dataset():
         str_map = entry['str_map']
 
         parse_tree = parse(code)
-        rule_list = parse_tree.get_rule_list(include_leaf=True, leaf_val=True)
+        rule_list, rule_pos_list, par_rule_pos_list = parse_tree.get_rule_list(include_leaf=True, leaf_val=True)
 
         actions = []
 
         can_fully_gen = True
 
-        import astor
-        from parse import code_to_ast
-        ref_code = astor.to_source(code_to_ast(code)).replace('\"','\'')
-        ref_code2 = unescape(astor.to_source(tree_to_ast(parse_tree)))
+        # import astor
+        # from parse import code_to_ast
+        # ref_code = astor.to_source(code_to_ast(code)).replace('\"','\'')
+        # ref_code2 = unescape(astor.to_source(tree_to_ast(parse_tree)))
+        #
+        # if ref_code != ref_code2:
+        #     print '*' * 60
+        #     print idx
+        #     print ref_code
+        #     print ref_code2
+        #     print '*' * 60
 
-        if ref_code != ref_code2:
-            print '*' * 60
-            print idx
-            print ref_code
-            print ref_code2
-            print '*' * 60
-
-        for rule in rule_list:
+        gen_terminal_action_count = 0
+        rule_pos_map = dict()
+        for rule, rule_pos, par_rule_pos in zip(rule_list, rule_pos_list, par_rule_pos_list):
             if not is_builtin_type(rule.parent.type):
-                action = Action(APPLY_RULE, rule)
+                rule_pos_map[rule_pos] = rule_pos + gen_terminal_action_count
+                if len(actions) > 0:
+                    parent_t = rule_pos_map[par_rule_pos]
+                else:
+                    parent_t = 0
+
+                d = {'rule': rule, 'parent_t': parent_t}
+                action = Action(APPLY_RULE, d)
+
                 actions.append(action)
             if is_builtin_type(rule.parent.type):
                 assert rule.parent.label is None
                 assert len(rule.children) == 1
 
-                dummy_rule = copy.deepcopy(rule)
-                dummy_rule.children[0].label = 'val'
-                actions.append(Action(APPLY_RULE, dummy_rule))
+                # str -> str{val}
+                # TODO: remove dummy rules?
+                terminal_rule = copy.deepcopy(rule)
+                terminal_rule.children[0].label = 'val'
+
+                parent_t = rule_pos_map[par_rule_pos]
+                d = {'rule': terminal_rule, 'parent_t': parent_t}
+
+                actions.append(Action(APPLY_RULE, d))
+                # time step for this terminal rule application
+                terminal_rule_t = len(actions) - 1
 
                 terminal_val = rule.children[0].label
 
@@ -425,25 +468,30 @@ def parse_django_dataset():
                     except ValueError:
                         pass
 
+                    d = {'literal': terminal_token, 'rule': terminal_rule, 'parent_t': terminal_rule_t}
+
                     # cannot copy, only generation
                     # could be unk!
                     if tok_src_idx < 0 or tok_src_idx >= MAX_QUERY_LENGTH:
-                        action = Action(GEN_TOKEN, terminal_token)
+                        action = Action(GEN_TOKEN, d)
                         if terminal_token not in terminal_vocab:
                             if terminal_token not in query_tokens:
                                 # print terminal_token
                                 can_fully_gen = False
                     else:  # copy
                         if term_tok_id != terminal_vocab.unk:
-                            d = {'source_idx': tok_src_idx, 'literal': terminal_token}
+                            d['source_idx'] = tok_src_idx
                             action = Action(GEN_COPY_TOKEN, d)
                         else:
-                            d = {'source_idx': tok_src_idx, 'literal': terminal_token}
+                            d['source_idx'] = tok_src_idx
                             action = Action(COPY_TOKEN, d)
 
                     actions.append(action)
+                    gen_terminal_action_count += 1
 
-                actions.append(Action(GEN_TOKEN, '<eos>'))
+                d = {'literal': '<eos>', 'rule': terminal_rule, 'parent_t': terminal_rule_t}
+                actions.append(Action(GEN_TOKEN, d))
+                gen_terminal_action_count += 1
 
         if len(actions) == 0:
             empty_actions_count += 1
@@ -482,7 +530,7 @@ def parse_django_dataset():
     dev_data.init_data_matrices()
     test_data.init_data_matrices()
 
-    # serialize_to_file((train_data, dev_data, test_data), 'django.cleaned.dataset.bin')
+    serialize_to_file((train_data, dev_data, test_data), 'data/django.cleaned.dataset.freq5.par_info.bin')
 
     return train_data, dev_data, test_data
 

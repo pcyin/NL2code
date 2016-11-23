@@ -2,6 +2,7 @@ import theano
 import theano.tensor as T
 import numpy as np
 import logging
+import copy
 
 from nn.layers.embeddings import Embedding
 from nn.layers.core import Dense, Layer
@@ -50,14 +51,20 @@ class PointerNet(Layer):
         return scores
 
 class Hyp:
-    def __init__(self, tree=None):
-        if not tree:
-            self.tree = Tree('root')
+    def __init__(self, hyp=None):
+        if not hyp:
+            self.tree = DecodeTree('root')
+            self.t=-1
+            self.hist_h = []
         else:
-            self.tree = tree
+            self.tree = hyp.tree.copy()
+            self.t = hyp.t
+            self.hist_h = list(hyp.hist_h)
 
         self.score = 0.0
-        self.hist_h = []
+
+        self.__frontier_nt = self.tree
+        self.__frontier_nt_t = -1
 
     def __repr__(self):
         return self.tree.__repr__()
@@ -81,6 +88,37 @@ class Hyp:
 
         return True
 
+    def apply_rule(self, rule, nt=None):
+        if nt is None:
+            nt = self.frontier_nt()
+
+        assert rule.parent.type == nt.type
+
+        self.t += 1
+        # set the time step when the rule leading by this nt is applied
+        nt.t = self.t
+
+        for child_node in rule.children:
+            child = DecodeTree(child_node.type, child_node.label)
+            if is_builtin_type(rule.parent.type):
+                child.label = None
+                child.holds_value = True
+
+            nt.add_child(child)
+
+    def append_token(self, token, nt=None):
+        if nt is None:
+            nt = self.frontier_nt()
+
+        self.t += 1
+
+        if nt.label is None:
+            # this terminal node is empty
+            nt.t = self.t
+            nt.label = token
+        else:
+            nt.label += token
+
     def frontier_nt_helper(self, node):
         if node.is_leaf:
             if Hyp.can_expand(node):
@@ -96,7 +134,46 @@ class Hyp:
         return None
 
     def frontier_nt(self):
-        return self.frontier_nt_helper(self.tree)
+        if self.__frontier_nt_t == self.t:
+            return self.__frontier_nt
+        else:
+            _frontier_nt = self.frontier_nt_helper(self.tree)
+            self.__frontier_nt = _frontier_nt
+            self.__frontier_nt_t = self.t
+
+            return _frontier_nt
+
+    def get_action_parent_t(self):
+        """
+        get the time step when the parent of the current
+        action was generated
+        WARNING: 0 will be returned if parent if None
+        """
+        nt = self.frontier_nt()
+
+        # if nt is a non-finishing leaf
+        # if nt.holds_value:
+        #     return nt.t
+
+        if nt.parent:
+            return nt.parent.t
+        else:
+            return 0
+
+    # def get_action_parent_tree(self):
+    #     """
+    #     get the parent tree
+    #     """
+    #     nt = self.frontier_nt()
+    #
+    #     # if nt is a non-finishing leaf
+    #     if nt.holds_value:
+    #         return nt
+    #
+    #     if nt.parent:
+    #         return nt.parent
+    #     else:
+    #         return None
 
 class CondAttLSTM(Layer):
     """
@@ -124,31 +201,35 @@ class CondAttLSTM(Layer):
         self.U_i = self.inner_init((self.output_dim, self.output_dim))
         self.C_i = self.inner_init((self.context_dim, self.output_dim))
         self.H_i = self.inner_init((self.output_dim, self.output_dim))
+        self.P_i = self.inner_init((self.output_dim, self.output_dim))
         self.b_i = shared_zeros((self.output_dim))
 
         self.W_f = self.init((input_dim, self.output_dim))
         self.U_f = self.inner_init((self.output_dim, self.output_dim))
         self.C_f = self.inner_init((self.context_dim, self.output_dim))
         self.H_f = self.inner_init((self.output_dim, self.output_dim))
+        self.P_f = self.inner_init((self.output_dim, self.output_dim))
         self.b_f = self.forget_bias_init((self.output_dim))
 
         self.W_c = self.init((input_dim, self.output_dim))
         self.U_c = self.inner_init((self.output_dim, self.output_dim))
         self.C_c = self.inner_init((self.context_dim, self.output_dim))
         self.H_c = self.inner_init((self.output_dim, self.output_dim))
+        self.P_c = self.inner_init((self.output_dim, self.output_dim))
         self.b_c = shared_zeros((self.output_dim))
 
         self.W_o = self.init((input_dim, self.output_dim))
         self.U_o = self.inner_init((self.output_dim, self.output_dim))
         self.C_o = self.inner_init((self.context_dim, self.output_dim))
         self.H_o = self.inner_init((self.output_dim, self.output_dim))
+        self.P_o = self.inner_init((self.output_dim, self.output_dim))
         self.b_o = shared_zeros((self.output_dim))
 
         self.params = [
-            self.W_i, self.U_i, self.b_i, self.C_i, self.H_i,
-            self.W_c, self.U_c, self.b_c, self.C_c, self.H_c,
-            self.W_f, self.U_f, self.b_f, self.C_f, self.H_f,
-            self.W_o, self.U_o, self.b_o, self.C_o, self.H_o
+            self.W_i, self.U_i, self.b_i, self.C_i, self.H_i, self.P_i,
+            self.W_c, self.U_c, self.b_c, self.C_c, self.H_c, self.P_c,
+            self.W_f, self.U_f, self.b_f, self.C_f, self.H_f, self.P_f,
+            self.W_o, self.U_o, self.b_o, self.C_o, self.H_o, self.P_o,
         ]
 
         # attention layer
@@ -180,10 +261,12 @@ class CondAttLSTM(Layer):
         self.set_name(name)
 
     def _step(self,
-              t, xi_t, xf_t, xo_t, xc_t, mask_t,
+              t, xi_t, xf_t, xo_t, xc_t, mask_t, parent_t,
               h_tm1, c_tm1, hist_h,
-              u_i, u_f, u_o, u_c, c_i, c_f, c_o, c_c,
+              u_i, u_f, u_o, u_c,
+              c_i, c_f, c_o, c_c,
               h_i, h_f, h_o, h_c,
+              p_i, p_f, p_o, p_c,
               att_h_w1, att_w2, att_b2,
               context, context_mask, context_att_trans,
               b_u):
@@ -216,7 +299,7 @@ class CondAttLSTM(Layer):
         ##### attention over history #####
 
         def _attention_over_history():
-            hist_h_mask = T.zeros((hist_h.shape[0], hist_h.shape[1]))
+            hist_h_mask = T.zeros((hist_h.shape[0], hist_h.shape[1]), dtype='int8')
             hist_h_mask = T.set_subtensor(hist_h_mask[:, T.arange(t)], 1)
 
             hist_h_att_trans = T.dot(hist_h, self.hatt_hist_W1) + self.hatt_b1
@@ -245,14 +328,22 @@ class CondAttLSTM(Layer):
 
         ##### attention over history #####
 
+        ##### feed in parent hidden state #####
+
+        par_h = T.switch(t,
+                         hist_h[T.arange(hist_h.shape[0]), parent_t, :],
+                         T.zeros_like(h_tm1))
+
+        ##### feed in parent hidden state #####
+
         i_t = self.inner_activation(
-            xi_t + T.dot(h_tm1 * b_u[0], u_i) + T.dot(ctx_vec, c_i) + T.dot(h_ctx_vec, h_i))
+            xi_t + T.dot(h_tm1 * b_u[0], u_i) + T.dot(ctx_vec, c_i) + T.dot(par_h, p_i))  # + T.dot(h_ctx_vec, h_i)
         f_t = self.inner_activation(
-            xf_t + T.dot(h_tm1 * b_u[1], u_f) + T.dot(ctx_vec, c_f) + T.dot(h_ctx_vec, h_f))
+            xf_t + T.dot(h_tm1 * b_u[1], u_f) + T.dot(ctx_vec, c_f) + T.dot(par_h, p_f))  # + T.dot(h_ctx_vec, h_f)
         c_t = f_t * c_tm1 + i_t * self.activation(
-            xc_t + T.dot(h_tm1 * b_u[2], u_c) + T.dot(ctx_vec, c_c) + T.dot(h_ctx_vec, h_c))
+            xc_t + T.dot(h_tm1 * b_u[2], u_c) + T.dot(ctx_vec, c_c) + T.dot(par_h, p_c))  # + T.dot(h_ctx_vec, h_c)
         o_t = self.inner_activation(
-            xo_t + T.dot(h_tm1 * b_u[3], u_o) + T.dot(ctx_vec, c_o) + T.dot(h_ctx_vec, h_o))
+            xo_t + T.dot(h_tm1 * b_u[3], u_o) + T.dot(ctx_vec, c_o) + T.dot(par_h, p_o))  # + T.dot(h_ctx_vec, h_o)
         h_t = o_t * self.activation(c_t)
 
         h_t = (1 - mask_t) * h_tm1 + mask_t * h_t
@@ -323,7 +414,7 @@ class CondAttLSTM(Layer):
 
         return h_t, c_t, ctx_vec
 
-    def __call__(self, X, context, init_state=None, init_cell=None, hist_h=None,
+    def __call__(self, X, context, parent_t_seq, init_state=None, init_cell=None, hist_h=None,
                  mask=None, context_mask=None,
                  dropout=0, train=True, srng=None,
                  time_steps=None):
@@ -375,11 +466,14 @@ class CondAttLSTM(Layer):
 
         if train:
             n_timestep = X.shape[0]
-            time_steps = T.arange(n_timestep)
+            time_steps = T.arange(n_timestep, dtype='int32')
+
+        # (n_timestep, batch_size)
+        parent_t_seq = parent_t_seq.dimshuffle((1, 0))
 
         [outputs, cells, ctx_vectors, _], updates = theano.scan(
             self._step,
-            sequences=[time_steps, xi, xf, xo, xc, mask],
+            sequences=[time_steps, xi, xf, xo, xc, mask, parent_t_seq],
             outputs_info=[
                 first_state,  # for h
                 first_cell,  # for cell
@@ -390,6 +484,7 @@ class CondAttLSTM(Layer):
                 self.U_i, self.U_f, self.U_o, self.U_c,
                 self.C_i, self.C_f, self.C_o, self.C_c,
                 self.H_i, self.H_f, self.H_o, self.H_c,
+                self.P_i, self.P_f, self.P_o, self.P_c,
                 self.att_h_W1, self.att_W2, self.att_b2,
                 context, context_mask, context_att_trans,
                 B_u
