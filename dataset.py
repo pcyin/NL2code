@@ -187,7 +187,21 @@ class DataSet:
         order = ['query_tokens', 'tgt_action_seq', 'tgt_action_seq_type',
                  'tgt_node_seq', 'tgt_par_rule_seq', 'tgt_par_t_seq']
 
-        return [self.data_matrix[x][ids] for x in order]
+        max_src_seq_len = max(len(self.examples[i].query) for i in ids)
+        max_tgt_seq_len = max(len(self.examples[i].actions) for i in ids)
+
+        logging.debug('max. src sequence length: %d', max_src_seq_len)
+        logging.debug('max. tgt sequence length: %d', max_tgt_seq_len)
+
+        data = []
+        for entry in order:
+            if entry == 'query_tokens':
+                data.append(self.data_matrix[entry][ids, :max_src_seq_len])
+            else:
+                data.append(self.data_matrix[entry][ids, :max_tgt_seq_len])
+
+        return data
+
 
     def init_data_matrices(self):
         logging.info('init data matrices for [%s] dataset', self.name)
