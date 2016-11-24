@@ -52,13 +52,12 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
         eid_to_annot = dict()
         for raw_id, line in enumerate(open('/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.anno')):
             eid_to_annot[raw_id] = line.strip()
-        logging.info('evaluating [%s] set', dataset.name)
+        logging.info('evaluating [%s] set, [%d] examples', dataset.name, dataset.count)
 
     cum_oracle_bleu = 0.0
     cum_oracle_acc = 0.0
     cum_bleu = 0.0
     cum_acc = 0.0
-    cum_new_acc = 0.0
     sm = SmoothingFunction()
 
     all_references = []
@@ -158,14 +157,12 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
 
     cum_bleu /= dataset.count
     cum_acc /= dataset.count
-    cum_new_acc /= dataset.count
     cum_oracle_bleu /= dataset.count
     cum_oracle_acc /= dataset.count
 
     print 'corpus level bleu: %f' % corpus_bleu(all_references, all_predictions, smoothing_function=sm.method3)
     print 'sentence level bleu: %f' % cum_bleu
     print 'accuracy: %f' % cum_acc
-    print 'accuracy with original ref: %f' % cum_new_acc
     print 'oracle bleu: %f' % cum_oracle_bleu
     print 'oracle accuracy: %f' % cum_oracle_acc
 

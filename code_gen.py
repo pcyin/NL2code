@@ -108,11 +108,11 @@ if __name__ == '__main__':
             example_id = raw_input('example id: ')
             try:
                 example_id = int(example_id)
+                example = [e for e in test_data.examples if e.raw_id == example_id][0]
             except:
+                print 'something went wrong ...'
                 continue
             # example_id = int(example_id.strip())
-
-            example = [e for e in test_data.examples if e.raw_id == example_id][0]
 
             print 'gold parse tree:'
             print example.parse_tree
