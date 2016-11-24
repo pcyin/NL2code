@@ -124,6 +124,7 @@ class DataEntry:
     def __init__(self, raw_id, query, parse_tree, code, actions):
         self.raw_id = raw_id
         self.eid = -1
+        # FIXME: rename to query_token
         self.query = query
         self.parse_tree = parse_tree
         self.actions = actions
@@ -589,7 +590,85 @@ def check_terminals():
     # print 'num of invalid leaves: %d' % len(invalid_terminals)
     # print invalid_terminals
 
+def query_to_data(query, annot_vocab):
+    query_tokens = query.split(' ')
+    token_num = min(MAX_QUERY_LENGTH, len(query_tokens))
+    data = np.zeros((1, token_num), dtype='int32')
+
+    for tid, token in enumerate(query_tokens[:token_num]):
+        token_id = annot_vocab[token]
+
+        data[0, tid] = token_id
+
+    return data
+
+
 QUOTED_STRING_RE = re.compile(r"(?P<quote>['\"])(?P<string>.*?)(?<!\\)(?P=quote)")
+
+
+def canonicalize_query(query):
+    """
+    canonicalize the query, replace strings to a special place holder
+    """
+    str_count = 0
+    str_map = dict()
+
+    matches = QUOTED_STRING_RE.findall(query)
+
+    for match in matches:
+        # If one or more groups are present in the pattern,
+        # it returns a list of groups
+        quote = match[0]
+        str_literal = quote + match[1] + quote
+        # FIXME: substitute the ' % s ' with
+        if str_literal in ['\'%s\'', '\"%s\"']:
+            continue
+
+        str_repr = '_STR:%d_' % str_count
+        str_map[str_literal] = str_repr
+
+        query = query.replace(str_literal, str_repr)
+
+        str_count += 1
+
+    # tokenize
+    query_tokens = nltk.word_tokenize(query)
+
+    new_query_tokens = []
+    # break up function calls like foo.bar.func
+    for token in query_tokens:
+        new_query_tokens.append(token)
+        i = token.find('.')
+        if 0 < i < len(token) - 1:
+            new_tokens = ['['] + token.replace('.', ' . ').split(' ') + [']']
+            new_query_tokens.extend(new_tokens)
+
+    query = ' '.join(new_query_tokens)
+
+    return query, str_map
+
+
+def canonicalize_example(query, code):
+    from parse import code_to_ast, ast_to_tree, tree_to_ast, parse
+    import astor
+
+    canonical_query, str_map = canonicalize_query(query)
+    canonical_code = code
+
+    for str_literal, str_repr in str_map.iteritems():
+        canonical_code = canonical_code.replace(str_literal, '\'' + str_repr + '\'')
+
+    # check if the code compiles
+    try:
+        parse_tree = parse(canonical_code)
+        ast_tree = tree_to_ast(parse_tree)
+        astor.to_source(ast_tree)
+    except:
+        raise RuntimeError('error in parsing canonicalized code: %s' % code)
+
+    query_tokens = canonical_query.split(' ')
+
+    return query_tokens, canonical_code, str_map
 
 
 def process_query(query, code):
@@ -647,8 +726,8 @@ def process_query(query, code):
     return new_query_tokens, code, str_map
 
 def preprocess_dataset(annot_file, code_file):
-    f_annot = open('annot.all.txt', 'w')
-    f_code = open('code.all.txt', 'w')
+    f_annot = open('annot.all.canonicalized.txt', 'w')
+    f_code = open('code.all.canonicalized.txt', 'w')
 
     examples = []
 
@@ -657,7 +736,7 @@ def preprocess_dataset(annot_file, code_file):
         annot = annot.strip()
         code = code.strip()
         try:
-            clean_query_tokens, clean_code, str_map = process_query(annot, code)
+            clean_query_tokens, clean_code, str_map = canonicalize_example(annot, code)
             example = {'id': idx, 'query_tokens': clean_query_tokens, 'code': clean_code, 'str_map': str_map}
             examples.append(example)
 
@@ -689,6 +768,11 @@ if __name__== '__main__':
     from nn.utils.generic_utils import init_logging
     init_logging('parse.log')
 
+    annot_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.anno'
+    code_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.code'
+
+    preprocess_dataset(annot_file, code_file)
+
     # parse_django_dataset()
     # check_terminals()
 
@@ -699,4 +783,4 @@ if __name__== '__main__':
 
     # clean_dataset()
 
-    parse_django_dataset()
+    # parse_django_dataset()

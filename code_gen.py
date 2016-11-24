@@ -38,6 +38,8 @@ def parse_args():
     evaluate_parser.add_argument('-input', default='decode_results.bin')
     evaluate_parser.add_argument('-type', default='test_data')
 
+    interactive_parser.add_argument('-mode', default='dataset')
+
     args = parser.parse_args()
 
     return args
@@ -103,19 +105,30 @@ if __name__ == '__main__':
         evaluate_decode_results(dataset, decode_results)
 
     if args.operation == 'interactive':
+        from dataset import canonicalize_query, query_to_data
+        from collections import namedtuple
         assert model is not None
-        while True:
-            example_id = raw_input('example id: ')
-            try:
-                example_id = int(example_id)
-                example = [e for e in test_data.examples if e.raw_id == example_id][0]
-            except:
-                print 'something went wrong ...'
-                continue
-            # example_id = int(example_id.strip())
 
-            print 'gold parse tree:'
-            print example.parse_tree
+        while True:
+            cmd = raw_input('example id or query: ')
+            if args.mode == 'dataset':
+                try:
+                    example_id = int(cmd)
+                    example = [e for e in test_data.examples if e.raw_id == example_id][0]
+                except:
+                    print 'something went wrong ...'
+                    continue
+            elif args.mode == 'new':
+                # we play with new examples!
+                query, str_map = canonicalize_query(cmd)
+                vocab = train_data.annot_vocab
+                query_tokens = query.split(' ')
+                query_tokens_data = [query_to_data(query, vocab)]
+                example = namedtuple('example', ['query', 'data'])(query=query_tokens, data=query_tokens_data)
+
+            if hasattr(example, 'parse_tree'):
+                print 'gold parse tree:'
+                print example.parse_tree
 
             cand_list = model.decode(example, train_data.grammar, train_data.terminal_vocab,
                                      beam_size=BEAM_SIZE, max_time_step=DECODE_MAX_TIME_STEP)
