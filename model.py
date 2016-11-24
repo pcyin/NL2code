@@ -342,7 +342,7 @@ class Model:
             score_heap = []
 
             # iterating over items in the beam
-            print 'time step: %d, hyp num: %d' % (t, live_hyp_num)
+            # print 'time step: %d, hyp num: %d' % (t, live_hyp_num)
 
             word_prob = gen_action_prob[:, 0:1] * vocab_prob
             word_prob[:, unk] = 0
@@ -376,6 +376,7 @@ class Model:
                     # hyp.score /= hyp.tree.size
 
                     # remove small-sized hyps
+                    raise Exception('cannot be here!')
                     if t <= 2:
                         continue
 
@@ -490,8 +491,8 @@ class Model:
 
                 # if new_frontier_nt is None, then we have a new completed hyp!
                 if new_frontier_nt is None:
-                    if t <= 1:
-                        continue
+                    # if t <= 1:
+                    #     continue
 
                     new_hyp.n_timestep = t + 1
                     completed_hyps.append(new_hyp)
