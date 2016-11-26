@@ -39,14 +39,14 @@ class Learner(object):
         history_valid_perf = []
         best_model_params = None
 
-        train_data_iter = DataIterator(self.train_data, batch_size)
+        # train_data_iter = DataIterator(self.train_data, batch_size)
 
         for epoch in range(nb_epoch):
-            train_data_iter.reset()
+            # train_data_iter.reset()
             # if shuffle:
-            #     np.random.shuffle(index_array)
+            np.random.shuffle(index_array)
 
-            # batches = make_batches(nb_train_sample, batch_size)
+            batches = make_batches(nb_train_sample, batch_size)
 
             # epoch begin
             sys.stdout.write('Epoch %d' % epoch)
@@ -54,12 +54,12 @@ class Learner(object):
             cum_nb_examples = 0
             loss = 0.0
 
-            # for batch_index, (batch_start, batch_end) in enumerate(batches):
-            for batch_index, (examples, batch_ids) in enumerate(train_data_iter):
+            for batch_index, (batch_start, batch_end) in enumerate(batches):
+            # for batch_index, (examples, batch_ids) in enumerate(train_data_iter):
                 cum_updates += 1
 
-                # batch_ids = index_array[batch_start:batch_end]
-                # examples = dataset.get_examples(batch_ids)
+                batch_ids = index_array[batch_start:batch_end]
+                examples = dataset.get_examples(batch_ids)
                 cur_batch_size = len(examples)
 
                 inputs = dataset.get_prob_func_inputs(batch_ids)

@@ -132,7 +132,7 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
         for decode_cand in decode_cands[:10]:
             cid, cand, ast_tree, code = decode_cand
             try:
-                predict_tokens = tokenize(code)
+                predict_tokens = tokenize_code(code)
             except:
                 continue
 
