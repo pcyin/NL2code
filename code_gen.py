@@ -63,6 +63,10 @@ if __name__ == '__main__':
     logging.info('loading dataset [%s]', dataset_file)
     train_data, dev_data, test_data = deserialize_from_file(dataset_file)
 
+    # # get action steps statistics
+    # avg_action_num = np.average([len(e.actions) for e in train_data.examples])
+    # logging.info('avg_action_num: %d', avg_action_num)
+
     # train_data = train_data.get_dataset_by_ids(range(10), 'train')
     # test_data = train_data.get_dataset_by_ids(range(10), 'dev')
 

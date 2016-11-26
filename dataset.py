@@ -368,9 +368,17 @@ def parse_django_dataset():
 
     # helper function begins
     def get_terminal_tokens(_terminal_str):
-        _terminal_tokens = filter(None, re.split('([, .?!])', _terminal_str)) # _terminal_str.split('-SP-')
+        # _terminal_tokens = filter(None, re.split('([, .?!])', _terminal_str)) # _terminal_str.split('-SP-')
+        # _terminal_tokens = filter(None, re.split('( )', _terminal_str))  # _terminal_str.split('-SP-')
+        tmp_terminal_tokens = _terminal_str.split(' ')
+        _terminal_tokens = []
+        for token in tmp_terminal_tokens:
+            if token:
+                _terminal_tokens.append(token)
+            _terminal_tokens.append(' ')
 
-        return _terminal_tokens
+        return _terminal_tokens[:-1]
+        # return _terminal_tokens
     # helper function ends
 
     # first pass
@@ -512,7 +520,7 @@ def parse_django_dataset():
     dev_data.init_data_matrices()
     test_data.init_data_matrices()
 
-    serialize_to_file((train_data, dev_data, test_data), 'data/django.cleaned.dataset.freq5.par_info.refact.bin')
+    serialize_to_file((train_data, dev_data, test_data), 'data/django.cleaned.dataset.freq5.par_info.refact.space_only.bin')
 
     return train_data, dev_data, test_data
 
