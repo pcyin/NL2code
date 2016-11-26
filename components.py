@@ -13,9 +13,9 @@ import nn.activations as activations
 import nn.optimizers as optimizers
 
 from config import *
-from grammar import *
+from lang.grammar import Grammar
 from parse import *
-from tree import *
+from astnode import *
 
 
 class PointerNet(Layer):
@@ -51,15 +51,20 @@ class PointerNet(Layer):
         return scores
 
 class Hyp:
-    def __init__(self, hyp=None):
-        if not hyp:
-            self.tree = DecodeTree('root')
-            self.t=-1
-            self.hist_h = []
-        else:
+    def __init__(self, *args):
+        if isinstance(args[0], Hyp):
+            hyp = args[0]
+            self.grammar = hyp.grammar
             self.tree = hyp.tree.copy()
             self.t = hyp.t
             self.hist_h = list(hyp.hist_h)
+        else:
+            assert isinstance(args[0], Grammar)
+            grammar = args[0]
+            self.grammar = grammar
+            self.tree = DecodeTree(grammar.root_node.type)
+            self.t=-1
+            self.hist_h = []
 
         self.score = 0.0
 
@@ -69,15 +74,19 @@ class Hyp:
     def __repr__(self):
         return self.tree.__repr__()
 
-    @staticmethod
-    def can_expand(node):
-        if node.holds_value and \
-                (node.label and node.label.endswith('<eos>')):
+    def can_expand(self, node):
+        if self.grammar.is_value_node(node):
+            # if the node is finished
+            if node.value is not None and node.value.endswith('<eos>'):
+                return False
+            return True
+        elif self.grammar.is_terminal(node):
             return False
-        elif node.type == 'epsilon':
-            return False
-        elif is_terminal_ast_type(node.type):
-            return False
+
+        # elif node.type == 'epsilon':
+        #     return False
+        # elif is_terminal_ast_type(node.type):
+        #     return False
 
         # if node.type == 'root':
         #     return True
@@ -99,10 +108,10 @@ class Hyp:
         nt.t = self.t
 
         for child_node in rule.children:
-            child = DecodeTree(child_node.type, child_node.label)
-            if is_builtin_type(rule.parent.type):
-                child.label = None
-                child.holds_value = True
+            child = DecodeTree(child_node.type, child_node.label, child_node.value)
+            # if is_builtin_type(rule.parent.type):
+            #     child.label = None
+            #     child.holds_value = True
 
             nt.add_child(child)
 
@@ -112,16 +121,16 @@ class Hyp:
 
         self.t += 1
 
-        if nt.label is None:
+        if nt.value is None:
             # this terminal node is empty
             nt.t = self.t
-            nt.label = token
+            nt.value = token
         else:
-            nt.label += token
+            nt.value += token
 
     def frontier_nt_helper(self, node):
         if node.is_leaf:
-            if Hyp.can_expand(node):
+            if self.can_expand(node):
                 return node
             else:
                 return None

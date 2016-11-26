@@ -3,7 +3,8 @@ import config
 
 from model import *
 
-def decode_dataset(model, dataset, verbose=True):
+def decode_python_dataset(model, dataset, verbose=True):
+    from lang.py.parse import decode_tree_to_python_ast
     if verbose:
         logging.info('decoding [%s] set, num. examples: %d', dataset.name, dataset.count)
 
@@ -16,7 +17,7 @@ def decode_dataset(model, dataset, verbose=True):
         exg_decode_results = []
         for cid, cand in enumerate(cand_list[:10]):
             try:
-                ast_tree = decode_tree_to_ast(cand.tree)
+                ast_tree = decode_tree_to_python_ast(cand.tree)
                 code = astor.to_source(ast_tree)
                 exg_decode_results.append((cid, cand, ast_tree, code))
             except:

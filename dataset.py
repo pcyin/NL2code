@@ -13,8 +13,6 @@ from itertools import chain
 
 from nn.utils.io_utils import serialize_to_file, deserialize_from_file
 
-from parse import tree_to_ast, ast_to_tree, parse, parse_django
-from grammar import TypedRule
 from config import *
 
 
@@ -121,7 +119,7 @@ def gen_vocab(tokens, vocab_size=3000, freq_cutoff=5):
 
 
 class DataEntry:
-    def __init__(self, raw_id, query, parse_tree, code, actions):
+    def __init__(self, raw_id, query, parse_tree, code, actions, meta_data):
         self.raw_id = raw_id
         self.eid = -1
         # FIXME: rename to query_token
@@ -129,6 +127,7 @@ class DataEntry:
         self.parse_tree = parse_tree
         self.actions = actions
         self.code = code
+        self.meta_data = meta_data
 
     @property
     def data(self):
@@ -140,7 +139,7 @@ class DataEntry:
         return self._data
 
     def copy(self):
-        e = DataEntry(self.raw_id, self.query, self.parse_tree, self.code, self.actions)
+        e = DataEntry(self.raw_id, self.query, self.parse_tree, self.code, self.actions, self.meta_data)
 
         return e
 
@@ -258,26 +257,25 @@ class DataSet:
 
                 # parent information
                 rule = action.data['rule']
-                tree = rule.tree
-                parent_tree = tree.parent
-
-                if action.act_type == APPLY_RULE:
-                    tgt_node_seq[eid, t] = self.grammar.get_node_type_id(rule.parent)
-                    if parent_tree:
-                        parent_rule = parent_tree.to_rule()
-                        tgt_par_rule_seq[eid, t] = self.grammar.rule_to_id[parent_rule]
-                    else:
-                        assert t == 0
-                        tgt_par_rule_seq[eid, t] = -1
+                parent_rule = action.data['parent_rule']
+                tgt_node_seq[eid, t] = self.grammar.get_node_type_id(rule.parent)
+                if parent_rule:
+                    tgt_par_rule_seq[eid, t] = self.grammar.rule_to_id[parent_rule]
                 else:
-                    tgt_par_rule_seq[eid, t] = self.grammar.rule_to_id[rule]
-                    tgt_node_seq[eid, t] = self.grammar.get_node_type_id(rule.children[0].type)
+                    assert t == 0
+                    tgt_par_rule_seq[eid, t] = -1
 
                 # parent hidden states
                 parent_t = action.data['parent_t']
                 tgt_par_t_seq[eid, t] = parent_t
 
             example.dataset = self
+
+
+class DataHelper(object):
+    @staticmethod
+    def canonicalize_query(query):
+        return query
 
 
 def parse_django_dataset_nt_only():
@@ -347,13 +345,20 @@ def parse_django_dataset_nt_only():
 
 
 def parse_django_dataset():
-    from grammar import is_builtin_type
-    from parse import unescape
+    from lang.py.parse import parse_raw
+    from lang.util import escape
 
     annot_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.anno'
     code_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.code'
 
     data = preprocess_dataset(annot_file, code_file)
+
+    for e in data:
+        e['parse_tree'] = parse_raw(e['code'])
+
+    # build grammar ...
+    from lang.py.parse import extract_grammar
+    grammar, all_parse_trees = extract_grammar(code_file)
 
     annot_tokens = list(chain(*[e['query_tokens'] for e in data]))
     annot_vocab = gen_vocab(annot_tokens, vocab_size=5000, freq_cutoff=5) # gen_vocab(annot_tokens, vocab_size=5980)
@@ -363,43 +368,31 @@ def parse_django_dataset():
 
     # helper function begins
     def get_terminal_tokens(_terminal_str):
-        tmp_terminal_tokens = _terminal_str.split('-SP-')
-        _terminal_tokens = []
-        for token in tmp_terminal_tokens:
-            if token:
-                _terminal_tokens.append(token)
-            _terminal_tokens.append('-SP-')
+        _terminal_tokens = filter(None, re.split('([, .?!])', _terminal_str)) # _terminal_str.split('-SP-')
 
-        return _terminal_tokens[:-1]
+        return _terminal_tokens
     # helper function ends
-
-    # build grammar ...
-    grammar, all_parse_trees = parse_django(code_file)
 
     # first pass
     for entry in data:
         idx = entry['id']
         query_tokens = entry['query_tokens']
         code = entry['code']
+        parse_tree = entry['parse_tree']
 
-        parse_tree = parse(code)
-        rule_list, rule_pos_list, par_rule_pos_list = parse_tree.get_rule_list(include_leaf=True, leaf_val=True)
-
-        for rule in rule_list:
-            if is_builtin_type(rule.parent.type):
-                assert rule.parent.label is None
-                assert len(rule.children) == 1
-                terminal_val = rule.children[0].label
-
+        for node in parse_tree.get_leaves():
+            if grammar.is_value_node(node):
+                terminal_val = node.value
                 terminal_str = str(terminal_val)
-                # print idx, terminal_str
+
                 terminal_tokens = get_terminal_tokens(terminal_str)
 
                 for terminal_token in terminal_tokens:
                     assert len(terminal_token) > 0
                     terminal_token_seq.append(terminal_token)
 
-    terminal_vocab = gen_vocab(terminal_token_seq, vocab_size=4830, freq_cutoff=5)
+    terminal_vocab = gen_vocab(terminal_token_seq, vocab_size=5000, freq_cutoff=5)
+    assert '_STR:0_' in terminal_vocab
 
     train_data = DataSet(annot_vocab, terminal_vocab, grammar, 'train_data')
     dev_data = DataSet(annot_vocab, terminal_vocab, grammar, 'dev_data')
@@ -415,65 +408,40 @@ def parse_django_dataset():
         query_tokens = entry['query_tokens']
         code = entry['code']
         str_map = entry['str_map']
+        parse_tree = entry['parse_tree']
 
-        parse_tree = parse(code)
-        rule_list, rule_pos_list, par_rule_pos_list = parse_tree.get_rule_list(include_leaf=True, leaf_val=True)
+        rule_list, rule_parents = parse_tree.get_productions(include_value_node=True)
 
         actions = []
-
         can_fully_gen = True
-
-        # import astor
-        # from parse import code_to_ast
-        # ref_code = astor.to_source(code_to_ast(code)).replace('\"','\'')
-        # ref_code2 = unescape(astor.to_source(tree_to_ast(parse_tree)))
-        #
-        # if ref_code != ref_code2:
-        #     print '*' * 60
-        #     print idx
-        #     print ref_code
-        #     print ref_code2
-        #     print '*' * 60
-
-        gen_terminal_action_count = 0
         rule_pos_map = dict()
-        for rule, rule_pos, par_rule_pos in zip(rule_list, rule_pos_list, par_rule_pos_list):
-            if not is_builtin_type(rule.parent.type):
-                rule_pos_map[rule_pos] = rule_pos + gen_terminal_action_count
-                if len(actions) > 0:
-                    parent_t = rule_pos_map[par_rule_pos]
+
+        for rule_count, rule in enumerate(rule_list):
+            if not grammar.is_value_node(rule.parent):
+                assert rule.value is None
+                parent_rule = rule_parents[(rule_count, rule)][0]
+                if parent_rule:
+                    parent_t = rule_pos_map[parent_rule]
                 else:
                     parent_t = 0
 
-                d = {'rule': rule, 'parent_t': parent_t}
+                rule_pos_map[rule] = len(actions)
+
+                d = {'rule': rule, 'parent_t': parent_t, 'parent_rule': parent_rule}
                 action = Action(APPLY_RULE, d)
 
                 actions.append(action)
-            if is_builtin_type(rule.parent.type):
-                assert rule.parent.label is None
-                assert len(rule.children) == 1
+            else:
+                assert rule.is_leaf
 
-                # str -> str{val}
-                # TODO: remove dummy rules?
-                terminal_rule = copy.deepcopy(rule)
-                terminal_rule.children[0].label = 'val'
+                parent_rule = rule_parents[(rule_count, rule)][0]
+                parent_t = rule_pos_map[parent_rule]
 
-                parent_t = rule_pos_map[par_rule_pos]
-                d = {'rule': terminal_rule, 'parent_t': parent_t}
-
-                actions.append(Action(APPLY_RULE, d))
-                # time step for this terminal rule application
-                terminal_rule_t = len(actions) - 1
-
-                terminal_val = rule.children[0].label
-
+                terminal_val = rule.value
                 terminal_str = str(terminal_val)
                 terminal_tokens = get_terminal_tokens(terminal_str)
 
-                # print idx, terminal_str
-                # terminal_tokens = [t for t in terminal_str.split(' ') if len(t) > 0]
-
-                assert len(terminal_tokens) > 0
+                # assert len(terminal_tokens) > 0
 
                 for terminal_token in terminal_tokens:
                     term_tok_id = terminal_vocab[terminal_token]
@@ -483,7 +451,7 @@ def parse_django_dataset():
                     except ValueError:
                         pass
 
-                    d = {'literal': terminal_token, 'rule': terminal_rule, 'parent_t': terminal_rule_t}
+                    d = {'literal': terminal_token, 'rule': rule, 'parent_rule': parent_rule, 'parent_t': parent_t}
 
                     # cannot copy, only generation
                     # could be unk!
@@ -502,17 +470,16 @@ def parse_django_dataset():
                             action = Action(COPY_TOKEN, d)
 
                     actions.append(action)
-                    gen_terminal_action_count += 1
 
-                d = {'literal': '<eos>', 'rule': terminal_rule, 'parent_t': terminal_rule_t}
+                d = {'literal': '<eos>', 'rule': rule, 'parent_rule': parent_rule, 'parent_t': parent_t}
                 actions.append(Action(GEN_TOKEN, d))
-                gen_terminal_action_count += 1
 
         if len(actions) == 0:
             empty_actions_count += 1
             continue
 
-        example = DataEntry(idx, query_tokens, parse_tree, code, actions)
+        example = DataEntry(idx, query_tokens, parse_tree, code, actions,
+                            {'raw_code': entry['raw_code'], 'str_map': entry['str_map']})
 
         if can_fully_gen:
             can_fully_gen_num += 1
@@ -545,7 +512,7 @@ def parse_django_dataset():
     dev_data.init_data_matrices()
     test_data.init_data_matrices()
 
-    serialize_to_file((train_data, dev_data, test_data), 'data/django.cleaned.dataset.freq5.par_info.bin')
+    serialize_to_file((train_data, dev_data, test_data), 'data/django.cleaned.dataset.freq5.par_info.refact.bin')
 
     return train_data, dev_data, test_data
 
@@ -589,6 +556,7 @@ def check_terminals():
     #
     # print 'num of invalid leaves: %d' % len(invalid_terminals)
     # print invalid_terminals
+
 
 def query_to_data(query, annot_vocab):
     query_tokens = query.split(' ')
@@ -649,8 +617,8 @@ def canonicalize_query(query):
 
 
 def canonicalize_example(query, code):
-    from parse import code_to_ast, ast_to_tree, tree_to_ast, parse
-    import astor
+    from lang.py.parse import parse_raw, parse_tree_to_python_ast, canonicalize_code as make_it_compilable
+    import astor, ast
 
     canonical_query, str_map = canonicalize_query(query)
     canonical_code = code
@@ -658,13 +626,16 @@ def canonicalize_example(query, code):
     for str_literal, str_repr in str_map.iteritems():
         canonical_code = canonical_code.replace(str_literal, '\'' + str_repr + '\'')
 
-    # check if the code compiles
-    try:
-        parse_tree = parse(canonical_code)
-        ast_tree = tree_to_ast(parse_tree)
-        astor.to_source(ast_tree)
-    except:
-        raise RuntimeError('error in parsing canonicalized code: %s' % code)
+    canonical_code = make_it_compilable(canonical_code)
+
+    # sanity check
+    parse_tree = parse_raw(canonical_code)
+    gold_ast_tree = ast.parse(canonical_code).body[0]
+    gold_source = astor.to_source(gold_ast_tree)
+    ast_tree = parse_tree_to_python_ast(parse_tree)
+    source = astor.to_source(ast_tree)
+
+    assert gold_source == source, 'sanity check fails: gold=[%s], actual=[%s]' % (gold_source, source)
 
     query_tokens = canonical_query.split(' ')
 
@@ -725,6 +696,7 @@ def process_query(query, code):
 
     return new_query_tokens, code, str_map
 
+
 def preprocess_dataset(annot_file, code_file):
     f_annot = open('annot.all.canonicalized.txt', 'w')
     f_code = open('code.all.canonicalized.txt', 'w')
@@ -737,7 +709,8 @@ def preprocess_dataset(annot_file, code_file):
         code = code.strip()
         try:
             clean_query_tokens, clean_code, str_map = canonicalize_example(annot, code)
-            example = {'id': idx, 'query_tokens': clean_query_tokens, 'code': clean_code, 'str_map': str_map}
+            example = {'id': idx, 'query_tokens': clean_query_tokens, 'code': clean_code,
+                       'str_map': str_map, 'raw_code': code}
             examples.append(example)
 
             f_annot.write('example# %d\n' % idx)
@@ -757,12 +730,13 @@ def preprocess_dataset(annot_file, code_file):
     f_annot.close()
     f_annot.close()
 
-    serialize_to_file(examples, 'django.cleaned.bin')
+    # serialize_to_file(examples, 'django.cleaned.bin')
 
     print 'error num: %d' % err_num
     print 'preprocess_dataset: cleaned example num: %d' % len(examples)
 
     return examples
+
 
 if __name__== '__main__':
     from nn.utils.generic_utils import init_logging
@@ -771,7 +745,7 @@ if __name__== '__main__':
     annot_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.anno'
     code_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.code'
 
-    preprocess_dataset(annot_file, code_file)
+    # preprocess_dataset(annot_file, code_file)
 
     # parse_django_dataset()
     # check_terminals()
@@ -783,4 +757,4 @@ if __name__== '__main__':
 
     # clean_dataset()
 
-    # parse_django_dataset()
+    parse_django_dataset()

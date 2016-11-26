@@ -12,10 +12,9 @@ from dataset import DataEntry, DataSet, Vocab, Action
 import config
 from learner import Learner
 from evaluation import *
-from decoder import decode_dataset
-from parse import decode_tree_to_ast
+from decoder import decode_python_dataset
 from components import Hyp
-from tree import Tree
+from astnode import ASTNode
 
 from nn.utils.generic_utils import init_logging
 from nn.utils.io_utils import deserialize_from_file, serialize_to_file
@@ -94,7 +93,7 @@ if __name__ == '__main__':
         # cProfile.run('decode_dataset(model, dataset)', sort=2)
 
         dataset = eval(args.type)
-        decode_results = decode_dataset(model, dataset)
+        decode_results = decode_python_dataset(model, dataset)
         serialize_to_file(decode_results, args.saveto)
 
     if args.operation == 'evaluate':

@@ -18,9 +18,9 @@ from nn.activations import softmax
 from nn.utils.theano_utils import *
 
 from config import *
-from grammar import *
+from lang.grammar import Grammar
 from parse import *
-from tree import *
+from astnode import *
 from util import is_numeric
 from components import Hyp, PointerNet, CondAttLSTM
 
@@ -286,7 +286,7 @@ class Model:
         completed_hyp_num = 0
         live_hyp_num = 1
 
-        root_hyp = Hyp()
+        root_hyp = Hyp(grammar)
         root_hyp.state = np.zeros(LSTM_STATE_DIM).astype('float32')
         root_hyp.cell = np.zeros(LSTM_STATE_DIM).astype('float32')
         root_hyp.action_embed = np.zeros(LSTM_STATE_DIM).astype('float32')
@@ -342,7 +342,7 @@ class Model:
             score_heap = []
 
             # iterating over items in the beam
-            # print 'time step: %d, hyp num: %d' % (t, live_hyp_num)
+            print 'time step: %d, hyp num: %d' % (t, live_hyp_num)
 
             word_prob = gen_action_prob[:, 0:1] * vocab_prob
             word_prob[:, unk] = 0
@@ -370,26 +370,13 @@ class Model:
 
                 frontier_nt = hyp.frontier_nt()
                 hyp_frontier_nts.append(frontier_nt)
-                # we have a completed hyp
-                if frontier_nt is None:
-                    # hyp.score /= t
-                    # hyp.score /= hyp.tree.size
 
-                    # remove small-sized hyps
-                    raise Exception('cannot be here!')
-                    if t <= 2:
-                        continue
-
-                    hyp.n_timestep = t
-                    completed_hyps.append(hyp)
-                    completed_hyp_num += 1
-
-                    continue
+                assert hyp, 'none hyp!'
 
                 # if it's not a leaf
-                if not frontier_nt.holds_value:
+                if not grammar.is_value_node(frontier_nt):
                     # iterate over all the possible rules
-                    rules = grammar[frontier_nt.node]
+                    rules = grammar[frontier_nt.as_type_node]
                     assert len(rules) > 0, 'fail to expand nt node %s' % frontier_nt
                     for rule in rules:
                         rule_id = grammar.rule_to_id[rule]
@@ -402,7 +389,7 @@ class Model:
                         rule_apply_cand_rules.append(rule)
                         rule_apply_cand_rule_ids.append(rule_id)
 
-                else:  # it's a leaf!
+                else:  # it's a leaf that holds values
                     for i, tid in enumerate(src_token_id):
                         if tid != -1:
                             word_prob[k, tid] += gen_action_prob[k, 1] * copy_prob[k, i]
@@ -483,7 +470,7 @@ class Model:
                     new_hyp.hist_h.append(copy.copy(new_hyp.state))
                     new_hyp.cell = copy.copy(decoder_next_cell[hyp_id])
                     new_hyp.action_embed = vocab_embedding[tid]
-                    new_hyp.node_id = grammar.get_node_type_id(Node(frontier_nt.type, None))
+                    new_hyp.node_id = grammar.get_node_type_id(frontier_nt)
 
 
                 # get the new frontier nt after rule application
@@ -501,7 +488,7 @@ class Model:
                 else:
                     new_hyp.node_id = grammar.get_node_type_id(new_frontier_nt.type)
                     new_hyp.parent_rule_id = grammar.rule_to_id[
-                        new_frontier_nt.parent.to_rule(include_terminal_val=False)]
+                        new_frontier_nt.parent.to_rule(include_value=False)]
 
                     new_hyp_samples.append(new_hyp)
 

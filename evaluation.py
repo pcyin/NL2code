@@ -5,8 +5,6 @@ import logging
 import traceback
 
 from model import *
-from parse import unescape
-import config
 
 
 def evaluate(model, dataset, verbose=True):
