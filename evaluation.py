@@ -47,6 +47,7 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
 
     f = f_decode = None
     if verbose:
+        exact_match_ids = []
         f = open(dataset.name + '.exact_match', 'w')
         f_decode = open(dataset.name + '.decode_results.txt', 'w')
         eid_to_annot = dict()
@@ -89,6 +90,7 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
             cum_acc += 1
 
             if verbose:
+                exact_match_ids.append(example.raw_id)
                 f.write('-' * 60 + '\n')
                 f.write('example_id: %d\n' % example.raw_id)
                 f.write(code + '\n')
@@ -167,6 +169,7 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
     print 'oracle accuracy: %f' % cum_oracle_acc
 
     if verbose:
+        f.write(', '.join([str(i) for i in exact_match_ids]))
         f.close()
         f_decode.close()
 
