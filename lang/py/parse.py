@@ -151,7 +151,7 @@ def decode_tree_to_python_ast(decode_tree):
 
         if terminal.type in {int, float, str, bool}:
             # cast to target data type
-            terminal.label = terminal.type(terminal.label)
+            terminal.value = terminal.type(terminal.value)
 
     ast_tree = parse_tree_to_python_ast(decode_tree)
 
@@ -295,7 +295,7 @@ def get_grammar(parse_trees):
     return grammar
 
 
-def tokenize(code):
+def tokenize_code(code):
     token_stream = generate_tokens(StringIO(code).readline)
     tokens = []
     for toknum, tokval, (srow, scol), (erow, ecol), _ in token_stream:

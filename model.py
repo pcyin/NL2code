@@ -342,7 +342,7 @@ class Model:
             score_heap = []
 
             # iterating over items in the beam
-            print 'time step: %d, hyp num: %d' % (t, live_hyp_num)
+            # print 'time step: %d, hyp num: %d' % (t, live_hyp_num)
 
             word_prob = gen_action_prob[:, 0:1] * vocab_prob
             word_prob[:, unk] = 0

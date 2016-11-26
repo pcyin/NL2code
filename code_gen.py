@@ -63,6 +63,9 @@ if __name__ == '__main__':
     logging.info('loading dataset [%s]', dataset_file)
     train_data, dev_data, test_data = deserialize_from_file(dataset_file)
 
+    # train_data = train_data.get_dataset_by_ids(range(10), 'train')
+    # test_data = train_data.get_dataset_by_ids(range(10), 'dev')
+
     logging.info('source vocab size: %d', train_data.annot_vocab.size)
     logging.info('target vocab size: %d', train_data.terminal_vocab.size)
 

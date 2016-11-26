@@ -41,6 +41,8 @@ def evaluate(model, dataset, verbose=True):
     return exact_match_ratio
 
 def evaluate_decode_results(dataset, decode_results, verbose=True):
+    from lang.py.parse import tokenize_code
+    import ast
     assert dataset.count == len(decode_results)
 
     f = f_decode = None
@@ -63,10 +65,10 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
 
     for eid in range(dataset.count):
         example = dataset.examples[eid]
-        refer_tree = example.parse_tree
-        refer_ast_tree = tree_to_ast(refer_tree)
-        refer_source = astor.to_source(refer_ast_tree)
-        refer_tokens = tokenize(refer_source)
+        ref_code = example.code
+        ref_ast_tree = ast.parse(ref_code).body[0]
+        refer_source = astor.to_source(ref_ast_tree)
+        refer_tokens = tokenize_code(refer_source)
 
         decode_cands = decode_results[eid]
         if len(decode_cands) == 0:
@@ -78,7 +80,7 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
 
         # simple_url_2_re = re.compile('_STR:0_', re.))
         try:
-            predict_tokens = tokenize(code)
+            predict_tokens = tokenize_code(code)
         except:
             logging.error('error in tokenizing [%s]', code)
             continue

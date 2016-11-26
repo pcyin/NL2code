@@ -81,7 +81,7 @@ class Learner(object):
 
                 if cum_updates % VALID_PER_MINIBATCH == 0:
                     logging.info('begin validation')
-                    decode_results = decoder.decode_dataset(self.model, self.val_data, verbose=False)
+                    decode_results = decoder.decode_python_dataset(self.model, self.val_data, verbose=False)
                     bleu, acc = evaluation.evaluate_decode_results(self.val_data, decode_results, verbose=False)
 
                     logging.info('sentence level bleu: %f', bleu)
