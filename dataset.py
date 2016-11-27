@@ -590,12 +590,17 @@ def canonicalize_query(query):
     str_map = dict()
 
     matches = QUOTED_STRING_RE.findall(query)
-
+    # de-duplicate
+    cur_replaced_strs = set()
     for match in matches:
         # If one or more groups are present in the pattern,
         # it returns a list of groups
         quote = match[0]
         str_literal = quote + match[1] + quote
+
+        if str_literal in cur_replaced_strs:
+            continue
+
         # FIXME: substitute the ' % s ' with
         if str_literal in ['\'%s\'', '\"%s\"']:
             continue
@@ -606,6 +611,7 @@ def canonicalize_query(query):
         query = query.replace(str_literal, str_repr)
 
         str_count += 1
+        cur_replaced_strs.add(str_literal)
 
     # tokenize
     query_tokens = nltk.word_tokenize(query)
