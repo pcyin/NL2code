@@ -113,6 +113,7 @@ if __name__ == '__main__':
     if args.operation == 'interactive':
         from dataset import canonicalize_query, query_to_data
         from collections import namedtuple
+        from lang.py.parse import decode_tree_to_python_ast
         assert model is not None
 
         while True:
@@ -141,19 +142,18 @@ if __name__ == '__main__':
 
             # serialize_to_file(cand_list, 'cand_hyps.%d.bin' % example.raw_id)
 
-            from parse import decode_tree_to_ast
-
             for cid, cand in enumerate(cand_list[:10]):
                 print '*' * 60
                 print 'cand #%d, score: %f' % (cid, cand.score)
 
                 try:
-                    ast_tree = decode_tree_to_ast(cand.tree)
+                    ast_tree = decode_tree_to_python_ast(cand.tree)
                     code = astor.to_source(ast_tree)
                     print 'code: ', code
                 except:
-                    print "Exception in decoding:"
+                    print "Exception in converting tree to code:"
                     print '-' * 60
+                    print 'raw_id: %d, beam pos: %d' % (example.raw_id, cid)
                     traceback.print_exc(file=sys.stdout)
                     print '-' * 60
                 finally:
