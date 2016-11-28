@@ -49,6 +49,7 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
     if verbose:
         exact_match_ids = []
         f = open(dataset.name + '.exact_match', 'w')
+        exact_match_ids = []
         f_decode = open(dataset.name + '.decode_results.txt', 'w')
         eid_to_annot = dict()
         for raw_id, line in enumerate(open('/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.anno')):
@@ -169,7 +170,7 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
     print 'oracle accuracy: %f' % cum_oracle_acc
 
     if verbose:
-        f.write(', '.join([str(i) for i in exact_match_ids]))
+        f.write(', '.join(str(i) for i in exact_match_ids))
         f.close()
         f_decode.close()
 
