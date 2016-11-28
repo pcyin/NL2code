@@ -87,8 +87,7 @@ class Learner(object):
                     logging.info('sentence level bleu: %f', bleu)
                     logging.info('accuracy: %f', acc)
 
-                    history_valid_perf.append(acc)
-                    if acc >= np.array(history_valid_perf).max():
+                    if len(history_valid_perf) ==0 or acc > np.array(history_valid_perf).max():
                         best_model_params = self.model.pull_params()
                         patience_counter = 0
                         logging.info('save current best model')
@@ -100,6 +99,7 @@ class Learner(object):
                             logging.info('Early Stop!')
                             early_stop = True
                             break
+                    history_valid_perf.append(acc)
 
                 if cum_updates % SAVE_PER_MINIBATCH == 0:
                     self.model.save('model.iter%d' % cum_updates)
