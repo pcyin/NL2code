@@ -156,7 +156,7 @@ class Model:
                    tgt_action_seq_type[:, :, 2] * terminal_gen_action_prob[:, :, 1] * copy_tgt_prob
 
         likelihood = T.log(tgt_prob + 1.e-7 * (1 - tgt_action_seq_mask))
-        loss = - (likelihood * tgt_action_seq_mask).sum(axis=-1) / tgt_action_seq_mask.sum(axis=-1)
+        loss = - (likelihood * tgt_action_seq_mask).sum(axis=-1) # / tgt_action_seq_mask.sum(axis=-1)
         loss = T.mean(loss)
 
         # let's build the function!
