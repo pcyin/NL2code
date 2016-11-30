@@ -62,8 +62,8 @@ class ASTNode(object):
 
     def __repr__(self):
         repr_str = ''
-        if not self.is_leaf:
-            repr_str += '('
+        # if not self.is_leaf:
+        repr_str += '('
 
         repr_str += typename(self.type)
 
@@ -73,10 +73,10 @@ class ASTNode(object):
         if self.value is not None:
             repr_str += '{val=%s}' % self.value
 
-        if not self.is_leaf:
-            for child in self.children:
-                repr_str += ' ' + child.__repr__()
-            repr_str += ')'
+        # if not self.is_leaf:
+        for child in self.children:
+            repr_str += ' ' + child.__repr__()
+        repr_str += ')'
 
         return repr_str
 
@@ -117,6 +117,18 @@ class ASTNode(object):
 
     def __ne__(self, other):
         return not self.__eq__(other)
+
+    def __getitem__(self, child_type):
+        return next(iter([c for c in self.children if c.type == child_type]))
+
+    def __delitem__(self, child_type):
+        tgt_child = [c for c in self.children if c.type == child_type]
+        if tgt_child:
+            assert len(tgt_child) == 1, 'unsafe deletion for more than one children'
+            tgt_child = tgt_child[0]
+            self.children.remove(tgt_child)
+        else:
+            raise KeyError
 
     def add_child(self, child):
         child.parent = self
