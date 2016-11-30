@@ -357,7 +357,7 @@ def parse_django_dataset():
         e['parse_tree'] = parse_raw(e['code'])
 
     # build grammar ...
-    from lang.py.parse import extract_grammar
+    from lang.py.dataset import extract_grammar
     grammar, all_parse_trees = extract_grammar(code_file)
 
     annot_tokens = list(chain(*[e['query_tokens'] for e in data]))
