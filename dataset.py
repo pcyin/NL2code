@@ -119,7 +119,7 @@ def gen_vocab(tokens, vocab_size=3000, freq_cutoff=5):
 
 
 class DataEntry:
-    def __init__(self, raw_id, query, parse_tree, code, actions, meta_data):
+    def __init__(self, raw_id, query, parse_tree, code, actions, meta_data=None):
         self.raw_id = raw_id
         self.eid = -1
         # FIXME: rename to query_token
@@ -357,7 +357,7 @@ def parse_django_dataset():
         e['parse_tree'] = parse_raw(e['code'])
 
     # build grammar ...
-    from lang.py.dataset import extract_grammar
+    from lang.py.py_dataset import extract_grammar
     grammar, all_parse_trees = extract_grammar(code_file)
 
     annot_tokens = list(chain(*[e['query_tokens'] for e in data]))
@@ -756,8 +756,8 @@ if __name__== '__main__':
     from nn.utils.generic_utils import init_logging
     init_logging('parse.log')
 
-    annot_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.anno'
-    code_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.code'
+    # annot_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.anno'
+    # code_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.code'
 
     # preprocess_dataset(annot_file, code_file)
 
@@ -771,4 +771,6 @@ if __name__== '__main__':
 
     # clean_dataset()
 
-    parse_django_dataset()
+    # parse_django_dataset()
+    from lang.py.py_dataset import parse_hs_dataset
+    parse_hs_dataset()

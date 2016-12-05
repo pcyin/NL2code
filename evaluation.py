@@ -7,6 +7,16 @@ import traceback
 from model import *
 
 
+def tokenize_for_bleu_eval(code):
+    code = re.sub(r'([^A-Za-z0-9_])', r' \1 ', code)
+    code = re.sub(r'([a-z])([A-Z])', r'\1 \2', code)
+    code = re.sub(r'\s+', ' ', code)
+    code = code.replace('"', '`')
+    code = code.replace('\'', '`')
+
+    return code.split(' ')
+
+
 def evaluate(model, dataset, verbose=True):
     if verbose:
         logging.info('evaluating [%s] dataset, [%d] examples' % (dataset.name, dataset.count))
@@ -47,13 +57,15 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
 
     f = f_decode = None
     if verbose:
-        exact_match_ids = []
         f = open(dataset.name + '.exact_match', 'w')
         exact_match_ids = []
         f_decode = open(dataset.name + '.decode_results.txt', 'w')
         eid_to_annot = dict()
-        for raw_id, line in enumerate(open('/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.anno')):
-            eid_to_annot[raw_id] = line.strip()
+
+        if MODE == 'django':
+            for raw_id, line in enumerate(open('/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.anno')):
+                eid_to_annot[raw_id] = line.strip()
+
         logging.info('evaluating [%s] set, [%d] examples', dataset.name, dataset.count)
 
     cum_oracle_bleu = 0.0
@@ -101,33 +113,30 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
             f_decode.write('-' * 60 + '\n')
             f_decode.write('example_id: %d\n' % example.raw_id)
             f_decode.write('intent: \n')
-            f_decode.write(eid_to_annot[example.raw_id] + '\n')
+
+            if MODE == 'django':
+                f_decode.write(eid_to_annot[example.raw_id] + '\n')
+            elif MODE == 'hs':
+                raise RuntimeError()
+
             f_decode.write('reference: \n')
             f_decode.write(refer_source + '\n')
             f_decode.write('prediction: \n')
             f_decode.write(code + '\n')
             f_decode.write('-' * 60 + '\n')
 
+        # we apply Ling Wang's trick when evaluating BLEU scores
+        refer_tokens_for_bleu = tokenize_for_bleu_eval(refer_source)
+        pred_tokens_for_bleu = tokenize_for_bleu_eval(code)
 
-        # if hasattr(example, 'code'):
-        #     ref_code = example.code
-        #     ref_code = astor.to_source(ast.parse(ref_code))
-        #     unescaped_cand_code = unescape(code)
-        #
-        #     refer_tokens2 = tokenize(ref_code)
-        #     unescaped_cand_tokens = tokenize(unescaped_cand_code)
-        #
-        #     if refer_tokens2 == unescaped_cand_tokens:
-        #         cum_new_acc += 1
+        all_references.append([refer_tokens_for_bleu])
+        all_predictions.append(pred_tokens_for_bleu)
 
-        all_references.append([refer_tokens])
-        all_predictions.append(predict_tokens)
-
-        score = sentence_bleu([refer_tokens], predict_tokens, smoothing_function=sm.method3)
+        bleu_score = sentence_bleu([refer_tokens_for_bleu], pred_tokens_for_bleu, smoothing_function=sm.method3)
         if verbose:
-            print 'raw_id: %d, score: %f' % (example.raw_id, score)
+            print 'raw_id: %d, bleu_score: %f' % (example.raw_id, bleu_score)
 
-        cum_bleu += score
+        cum_bleu += bleu_score
 
         # compute oracle
         best_score = -1000
@@ -143,7 +152,8 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
                 cur_oracle_acc = 1
 
             try:
-                score = sentence_bleu([refer_tokens], predict_tokens, smoothing_function=sm.method3)
+                pred_tokens_for_bleu = tokenize_for_bleu_eval(code)
+                bleu_score = sentence_bleu([refer_tokens_for_bleu], pred_tokens_for_bleu, smoothing_function=sm.method3)
             except:
                 print "Exception:"
                 print '-' * 60
@@ -152,8 +162,8 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
                 traceback.print_exc(file=sys.stdout)
                 print '-' * 60
 
-            if score > best_score:
-                best_score = score
+            if bleu_score > best_score:
+                best_score = bleu_score
 
         cum_oracle_bleu += best_score
         cum_oracle_acc += cur_oracle_acc

@@ -1,7 +1,9 @@
-SOURCE_VOCAB_SIZE = 2491 # 2492 # 5980
-TARGET_VOCAB_SIZE = 2110 # 2110 # 4830 #
-RULE_NUM = 223 # 228
-NODE_NUM = 100
+MODE = 'hs'
+
+SOURCE_VOCAB_SIZE = 341 # 2492 # 5980
+TARGET_VOCAB_SIZE = 556 # 2110 # 4830 #
+RULE_NUM = 100 # 228
+NODE_NUM = 70
 
 NODE_EMBED_DIM = 256
 EMBED_DIM = 256
@@ -19,14 +21,14 @@ WORD_DROPOUT = 0
 
 # training
 TRAIN_PATIENCE = 10
-MAX_EPOCH = 30
+MAX_EPOCH = 50
 BATCH_SIZE = 10
 VALID_PER_MINIBATCH = 4000
 SAVE_PER_MINIBATCH = 4000
 
 # decoding
 BEAM_SIZE = 50
-DECODE_MAX_TIME_STEP = 100
+DECODE_MAX_TIME_STEP = 350
 
 from collections import OrderedDict
 config_info = OrderedDict([(v, globals()[v]) for v in dir() if not v.startswith('__')])

@@ -84,10 +84,12 @@ class Learner(object):
                     decode_results = decoder.decode_python_dataset(self.model, self.val_data, verbose=False)
                     bleu, acc = evaluation.evaluate_decode_results(self.val_data, decode_results, verbose=False)
 
+                    val_perf = bleu
+
                     logging.info('sentence level bleu: %f', bleu)
                     logging.info('accuracy: %f', acc)
 
-                    if len(history_valid_perf) ==0 or acc > np.array(history_valid_perf).max():
+                    if len(history_valid_perf) ==0 or val_perf > np.array(history_valid_perf).max():
                         best_model_params = self.model.pull_params()
                         patience_counter = 0
                         logging.info('save current best model')
@@ -99,7 +101,7 @@ class Learner(object):
                             logging.info('Early Stop!')
                             early_stop = True
                             break
-                    history_valid_perf.append(acc)
+                    history_valid_perf.append(val_perf)
 
                 if cum_updates % SAVE_PER_MINIBATCH == 0:
                     self.model.save('model.iter%d' % cum_updates)

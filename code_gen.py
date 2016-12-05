@@ -82,7 +82,7 @@ if __name__ == '__main__':
 
     if args.operation == 'train':
         # train_data_sample = train_data.get_dataset_by_ids(range(10), 'train_sample')
-        # dev_data_sample = dev_data.get_dataset_by_ids(range(10), 'dev_sample')
+        # dev_data_sample = dev_data.get_dataset_by_ids(range(1), 'dev_sample')
         learner = Learner(model, train_data, dev_data)
         learner.train()
 

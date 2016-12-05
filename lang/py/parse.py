@@ -291,12 +291,24 @@ if __name__ == '__main__':
     #     if source1 != source2:
     #         pass
 
-    code = """__all__ = [  '_STR:0_' , '_STR:1_' , '_STR:2_' , '_STR:3_' ,  'CacheKeyWarning' , 'BaseCache' ,  ]"""
-    # code = """a = [1,2,3,4,'asdf', 234.3]"""
-    parse_tree = parse(code)
-    for leaf in parse_tree.get_leaves():
-        if leaf.value: print escape(leaf.value)
+    code = """
+class Demonwrath(SpellCard):
+    def __init__(self):
+        super().__init__("Demonwrath", 3, CHARACTER_CLASS.WARLOCK, CARD_RARITY.RARE)
 
+    def use(self, player, game):
+        super().use(player, game)
+        targets = copy.copy(game.other_player.minions)
+        targets.extend(game.current_player.minions)
+        for minion in targets:
+            if minion.card.minion_type is not MINION_TYPE.DEMON:
+                minion.damage(player.effective_spell_damage(2), self)
+"""
+    # # code = """a = [1,2,3,4,'asdf', 234.3]"""
+    parse_tree = parse(code)
+    # for leaf in parse_tree.get_leaves():
+    #     if leaf.value: print escape(leaf.value)
+    #
     print parse_tree
     # ast_tree = parse_tree_to_python_ast(parse_tree)
     # print astor.to_source(ast_tree)
