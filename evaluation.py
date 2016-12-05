@@ -77,6 +77,10 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
     all_references = []
     all_predictions = []
 
+    if all(len(cand) == 0 for cand in decode_results):
+        logging.ERROR('Empty decoding results for the current dataset!')
+        return -1, -1
+
     for eid in range(dataset.count):
         example = dataset.examples[eid]
         ref_code = example.code
