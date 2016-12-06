@@ -179,7 +179,7 @@ def parse_hs_dataset():
     MAX_QUERY_LENGTH = 70 # FIXME: figure out the best config!
     WORD_FREQ_CUT_OFF = 3
 
-    annot_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/card_datasets/hearthstone/all_hs.in'
+    annot_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/card_datasets/hearthstone/all_hs.mod.in'
     code_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/card_datasets/hearthstone/all_hs.out'
 
     data = preprocess_hs_dataset(annot_file, code_file)
@@ -342,7 +342,7 @@ def parse_hs_dataset():
     test_data.init_data_matrices()
 
     serialize_to_file((train_data, dev_data, test_data),
-                      'data/hs.freq{WORD_FREQ_CUT_OFF}.bin'.format(WORD_FREQ_CUT_OFF=WORD_FREQ_CUT_OFF))
+                      'data/hs.freq{WORD_FREQ_CUT_OFF}.pre_suf.bin'.format(WORD_FREQ_CUT_OFF=WORD_FREQ_CUT_OFF))
 
     return train_data, dev_data, test_data
 

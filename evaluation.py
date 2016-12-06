@@ -1,3 +1,5 @@
+# -*- coding: UTF-8 -*-
+
 from __future__ import division
 
 from nltk.translate.bleu_score import sentence_bleu, corpus_bleu, SmoothingFunction
@@ -52,6 +54,7 @@ def evaluate(model, dataset, verbose=True):
 
 def evaluate_decode_results(dataset, decode_results, verbose=True):
     from lang.py.parse import tokenize_code
+    # tokenize_code = tokenize_for_bleu_eval
     import ast
     assert dataset.count == len(decode_results)
 
@@ -65,6 +68,10 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
         if MODE == 'django':
             for raw_id, line in enumerate(open('/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.anno')):
                 eid_to_annot[raw_id] = line.strip()
+
+        if MODE == 'hs':
+            f_bleu_eval_ref = open(dataset.name + '.ref', 'w')
+            f_bleu_eval_hyp = open(dataset.name + '.hyp', 'w')
 
         logging.info('evaluating [%s] set, [%d] examples', dataset.name, dataset.count)
 
@@ -86,6 +93,7 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
         ref_code = example.code
         ref_ast_tree = ast.parse(ref_code).body[0]
         refer_source = astor.to_source(ref_ast_tree)
+        # refer_source = ref_code
         refer_tokens = tokenize_code(refer_source)
 
         decode_cands = decode_results[eid]
@@ -113,7 +121,17 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
                 f.write(code + '\n')
                 f.write('-' * 60 + '\n')
 
+        # we apply Ling Wang's trick when evaluating BLEU scores
+        refer_tokens_for_bleu = tokenize_for_bleu_eval(ref_code)
+        pred_tokens_for_bleu = tokenize_for_bleu_eval(code)
+
+        all_references.append([refer_tokens_for_bleu])
+        all_predictions.append(pred_tokens_for_bleu)
+        bleu_score = sentence_bleu([refer_tokens_for_bleu], pred_tokens_for_bleu, smoothing_function=sm.method3)
+
         if verbose:
+            print 'raw_id: %d, bleu_score: %f' % (example.raw_id, bleu_score)
+
             f_decode.write('-' * 60 + '\n')
             f_decode.write('example_id: %d\n' % example.raw_id)
             f_decode.write('intent: \n')
@@ -121,24 +139,16 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
             if MODE == 'django':
                 f_decode.write(eid_to_annot[example.raw_id] + '\n')
             elif MODE == 'hs':
-                raise RuntimeError()
+                f_decode.write(' '.join(example.query) + '\n')
+
+                f_bleu_eval_ref.write(' '.join(refer_tokens_for_bleu) + '\n')
+                f_bleu_eval_hyp.write(' '.join(pred_tokens_for_bleu) + '\n')
 
             f_decode.write('reference: \n')
             f_decode.write(refer_source + '\n')
             f_decode.write('prediction: \n')
             f_decode.write(code + '\n')
             f_decode.write('-' * 60 + '\n')
-
-        # we apply Ling Wang's trick when evaluating BLEU scores
-        refer_tokens_for_bleu = tokenize_for_bleu_eval(refer_source)
-        pred_tokens_for_bleu = tokenize_for_bleu_eval(code)
-
-        all_references.append([refer_tokens_for_bleu])
-        all_predictions.append(pred_tokens_for_bleu)
-
-        bleu_score = sentence_bleu([refer_tokens_for_bleu], pred_tokens_for_bleu, smoothing_function=sm.method3)
-        if verbose:
-            print 'raw_id: %d, bleu_score: %f' % (example.raw_id, bleu_score)
 
         cum_bleu += bleu_score
 
@@ -187,5 +197,9 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
         f.write(', '.join(str(i) for i in exact_match_ids))
         f.close()
         f_decode.close()
+
+        if MODE == 'hs':
+            f_bleu_eval_ref.close()
+            f_bleu_eval_hyp.close()
 
     return cum_bleu, cum_acc
