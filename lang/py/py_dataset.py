@@ -224,9 +224,9 @@ def parse_hs_dataset():
 
     # now generate the dataset!
 
-    train_data = DataSet(annot_vocab, terminal_vocab, grammar, 'train_data')
-    dev_data = DataSet(annot_vocab, terminal_vocab, grammar, 'dev_data')
-    test_data = DataSet(annot_vocab, terminal_vocab, grammar, 'test_data')
+    train_data = DataSet(annot_vocab, terminal_vocab, grammar, 'hs.train_data')
+    dev_data = DataSet(annot_vocab, terminal_vocab, grammar, 'hs.dev_data')
+    test_data = DataSet(annot_vocab, terminal_vocab, grammar, 'hs.test_data')
 
     all_examples = []
 
