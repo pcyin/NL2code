@@ -81,8 +81,8 @@ if __name__ == '__main__':
             model.load(args.model)
 
     if args.operation == 'train':
-        # train_data_sample = train_data.get_dataset_by_ids(range(10), 'train_sample')
-        # dev_data_sample = dev_data.get_dataset_by_ids(range(1), 'dev_sample')
+        # train_data = train_data.get_dataset_by_ids(range(50), 'train_sample')
+        # dev_data = train_data # dev_data.get_dataset_by_ids(range(10), 'dev_sample')
         learner = Learner(model, train_data, dev_data)
         learner.train()
 

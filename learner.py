@@ -81,13 +81,23 @@ class Learner(object):
 
                 if cum_updates % VALID_PER_MINIBATCH == 0:
                     logging.info('begin validation')
-                    decode_results = decoder.decode_python_dataset(self.model, self.val_data, verbose=False)
-                    bleu, acc = evaluation.evaluate_decode_results(self.val_data, decode_results, verbose=False)
 
-                    val_perf = bleu
+                    if MODE == 'ifttt':
+                        decode_results = decoder.decode_ifttt_dataset(self.model, self.val_data, verbose=False)
+                        channel_acc, channel_func_acc, prod_f1 = evaluation.evaluate_ifttt_results(self.val_data, decode_results, verbose=False)
 
-                    logging.info('sentence level bleu: %f', bleu)
-                    logging.info('accuracy: %f', acc)
+                        val_perf = channel_func_acc
+                        logging.info('channel acc: %f', channel_acc)
+                        logging.info('channel+func acc: %f', channel_func_acc)
+                        logging.info('prod F1: %f', prod_f1)
+                    else:
+                        decode_results = decoder.decode_python_dataset(self.model, self.val_data, verbose=False)
+                        bleu, acc = evaluation.evaluate_decode_results(self.val_data, decode_results, verbose=False)
+
+                        val_perf = bleu
+
+                        logging.info('sentence level bleu: %f', bleu)
+                        logging.info('accuracy: %f', acc)
 
                     if len(history_valid_perf) ==0 or val_perf > np.array(history_valid_perf).max():
                         best_model_params = self.model.pull_params()

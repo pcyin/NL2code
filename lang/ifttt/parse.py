@@ -36,10 +36,12 @@ def ifttt_ast_to_parse_tree_helper(s, offset):
         node.add_child(child_node)
 
 
-def ifttt_ast_to_parse_tree(s):
+def ifttt_ast_to_parse_tree(s, attach_func_to_channel=True):
     parse_tree, _ = ifttt_ast_to_parse_tree_helper(s, 0)
     parse_tree = strip_params(parse_tree)
-    parse_tree = attach_function_to_channel(parse_tree)
+
+    if attach_func_to_channel:
+        parse_tree = attach_function_to_channel(parse_tree)
 
     return parse_tree
 
@@ -48,7 +50,7 @@ def strip_params(parse_tree):
     if parse_tree.type == 'PARAMS':
         raise RuntimeError('should not go to here!')
 
-    parse_tree.children = [c for c in parse_tree.children if c.type != 'PARAMS']
+    parse_tree.children = [c for c in parse_tree.children if c.type != 'PARAMS' and c.type != 'OUTPARAMS']
     for i, child in enumerate(parse_tree.children):
         parse_tree.children[i] = strip_params(child)
 
