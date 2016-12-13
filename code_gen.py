@@ -46,9 +46,6 @@ def parse_args():
 if __name__ == '__main__':
     init_logging('parser.log', logging.INFO)
     args = parse_args()
-    # if args.conf:
-    #     logging.info('use external config file: %s', args.conf)
-    #     execfile(args.conf)
 
     logging.info('current config: %s', config_info)
 
@@ -67,9 +64,6 @@ if __name__ == '__main__':
     # avg_action_num = np.average([len(e.actions) for e in train_data.examples])
     # logging.info('avg_action_num: %d', avg_action_num)
 
-    # train_data = train_data.get_dataset_by_ids(range(10), 'train')
-    # test_data = train_data.get_dataset_by_ids(range(10), 'dev')
-
     logging.info('source vocab size: %d', train_data.annot_vocab.size)
     logging.info('target vocab size: %d', train_data.terminal_vocab.size)
 
@@ -81,8 +75,8 @@ if __name__ == '__main__':
             model.load(args.model)
 
     if args.operation == 'train':
-        # train_data = train_data.get_dataset_by_ids(range(50), 'train_sample')
-        # dev_data = train_data # dev_data.get_dataset_by_ids(range(10), 'dev_sample')
+        # train_data = train_data.get_dataset_by_ids(range(200), 'train_sample')
+        # dev_data = dev_data.get_dataset_by_ids(range(10), 'dev_sample')
         learner = Learner(model, train_data, dev_data)
         learner.train()
 
@@ -98,6 +92,10 @@ if __name__ == '__main__':
 
         # dataset = test_data # test_data.get_dataset_by_ids([1,2,3,4,5,6,7,8,9,10], name='sample')
         # cProfile.run('decode_dataset(model, dataset)', sort=2)
+
+        # from evaluation import decode_and_evaluate_ifttt
+        # decode_and_evaluate_ifttt(model, test_data)
+        # exit(0)
 
         dataset = eval(args.type)
         decode_results = decode_python_dataset(model, dataset)
@@ -139,8 +137,6 @@ if __name__ == '__main__':
 
             cand_list = model.decode(example, train_data.grammar, train_data.terminal_vocab,
                                      beam_size=BEAM_SIZE, max_time_step=DECODE_MAX_TIME_STEP)
-
-            # serialize_to_file(cand_list, 'cand_hyps.%d.bin' % example.raw_id)
 
             for cid, cand in enumerate(cand_list[:10]):
                 print '*' * 60

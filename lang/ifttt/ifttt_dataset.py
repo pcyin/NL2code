@@ -1,6 +1,10 @@
 # -*- coding: UTF-8 -*-
 from __future__ import division
 import string
+from collections import OrderedDict
+from collections import defaultdict
+from itertools import count
+
 from nn.utils.io_utils import serialize_to_file
 
 from lang.ifttt.grammar import IFTTTGrammar
@@ -126,7 +130,7 @@ def parse_ifttt_dataset():
     grammar = get_grammar([e['parse_tree'] for e in data])
 
     annot_tokens = list(chain(*[e['query_tokens'] for e in data]))
-    annot_vocab = gen_vocab(annot_tokens, vocab_size=5000, freq_cutoff=WORD_FREQ_CUT_OFF)
+    annot_vocab = gen_vocab(annot_tokens, vocab_size=10000, freq_cutoff=WORD_FREQ_CUT_OFF)
 
     logging.info('annot vocab. size: %d', annot_vocab.size)
 
@@ -231,7 +235,83 @@ def parse_ifttt_dataset():
     return train_data, dev_data, test_data
 
 
+def extract_turk_data():
+    turk_annot_file = '/Users/yinpengcheng/Research/SemanticParsing/ifttt/public_release/data/turk_public.tsv'
+    reference_file = '/Users/yinpengcheng/Research/SemanticParsing/ifttt/public_release/data/ifttt_public.tsv'
+
+    f_turk = open(turk_annot_file)
+    next(f_turk)
+
+    annot_data = OrderedDict()
+    for line in f_turk:
+        d = line.strip().split('\t')
+        url = d[0]
+        if url not in annot_data:
+            annot_data[url] = list()
+
+        annot_data[url].append({'trigger_channel': d[2], 'trigger_func': d[3], 'action_channel': d[4], 'action_func': d[5]})
+
+    f_ref = open(reference_file)
+    next(f_ref)
+    ref_data = OrderedDict()
+    for line in f_ref:
+        d = line.strip().split('\t')
+        url = d[0]
+
+        ref_data[url] = {'trigger_channel': d[2], 'trigger_func': d[3], 'action_channel': d[4], 'action_func': d[5]}
+
+    lt_three_agree_with_gold = []
+    omit_non_english = []
+    omit_unintelligible = []
+    for url, annots in annot_data.iteritems():
+        ref = ref_data[url]
+        match_with_gold_num = 0
+        non_english_num = unintelligible_num = 0
+        non_english_annots = []
+        unintelligible_annots = []
+
+        for annot in annots:
+            if annot['trigger_channel'] == ref['trigger_channel'] and annot['trigger_func'] == ref['trigger_func'] and \
+                annot['action_channel'] == ref['action_channel'] and annot['action_func'] == ref['action_func']:
+                match_with_gold_num += 1
+
+        for i, annot in enumerate(annots):
+            if annot['trigger_channel'] == 'nonenglish' and annot['trigger_func'] == 'nonenglish' and \
+                annot['action_channel'] == 'nonenglish' and annot['action_func'] == 'nonenglish':
+                non_english_num += 1
+                non_english_annots.append(i)
+
+            if annot['trigger_channel'] == 'unintelligible' and annot['trigger_func'] == 'unintelligible' and \
+                annot['action_channel'] == 'unintelligible' and annot['action_func'] == 'unintelligible':
+                unintelligible_num += 1
+                unintelligible_annots.append(i)
+
+        if non_english_num < 2: # len(annots) - non_english_num:
+            omit_non_english.append(url)
+
+        non_english_and_unintelligible_num = len(set(non_english_annots).union(set(unintelligible_annots)))
+        if non_english_and_unintelligible_num < len(annots) - non_english_and_unintelligible_num:
+            omit_unintelligible.append(url)
+
+        if match_with_gold_num >= 3:
+            lt_three_agree_with_gold.append(url)
+
+    print len(omit_non_english)
+    print len(omit_unintelligible)
+    print len(lt_three_agree_with_gold)
+
+    url2id = defaultdict(count(0).next)
+    for url in ref_data:
+        i = url2id[url]
+
+    f_gold = open('data/ifff.test_data.gold.id', 'w')
+    for url in lt_three_agree_with_gold:
+        i = url2id[url] + 77495 + 5171
+        f_gold.write(str(i) + '\n')
+    f_gold.close()
+
 if __name__ == '__main__':
     init_logging('ifttt.log')
     parse_ifttt_dataset()
     # analyze_ifttt_dataset()
+    # extract_turk_data()

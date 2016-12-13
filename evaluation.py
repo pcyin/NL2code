@@ -319,6 +319,16 @@ def ifttt_metric(predict_parse_tree, ref_parse_tree):
     return channel_acc, channel_func_acc, prod_f1
 
 
+def decode_and_evaluate_ifttt(model, test_data):
+    raw_ids = [int(i.strip()) for i in open('data/ifff.test_data.gold.id')]
+    eids  = [i for i, e in enumerate(test_data.examples) if e.raw_id in raw_ids]
+    test_data_subset = test_data.get_dataset_by_ids(eids, test_data.name + '.subset')
+
+    from decoder import decode_ifttt_dataset
+    decode_results = decode_ifttt_dataset(model, test_data_subset, verbose=True)
+    evaluate_ifttt_results(test_data_subset, decode_results)
+
+
 if __name__ == '__main__':
     from dataset import DataEntry, DataSet, Vocab, Action
     init_logging('parser.log', logging.INFO)
