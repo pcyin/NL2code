@@ -18,6 +18,7 @@ from nn.activations import softmax
 from nn.utils.theano_utils import *
 
 from config import *
+import config
 from lang.grammar import Grammar
 from parse import *
 from astnode import *
@@ -32,8 +33,12 @@ class Model:
 
         self.query_embedding = Embedding(SOURCE_VOCAB_SIZE, EMBED_DIM, name='query_embed')
 
-        self.query_encoder_lstm = BiLSTM(EMBED_DIM, QUERY_DIM / 2, return_sequences=True,
-                                         name='query_encoder_lstm')
+        if ENCODER_LSTM == 'bilstm':
+            self.query_encoder_lstm = BiLSTM(EMBED_DIM, QUERY_DIM / 2, return_sequences=True,
+                                             name='query_encoder_lstm')
+        else:
+            self.query_encoder_lstm = LSTM(EMBED_DIM, QUERY_DIM, return_sequences=True,
+                                           name='query_encoder_lstm')
 
         self.decoder_lstm = CondAttLSTM(RULE_EMBED_DIM + NODE_EMBED_DIM + RULE_EMBED_DIM, LSTM_STATE_DIM, QUERY_DIM, DECODER_ATT_HIDDEN_DIM,
                                         name='decoder_lstm')
