@@ -795,6 +795,24 @@ def is_terminal_ast_type(x):
 #         return '%s -> %s' % (self.parent, ', '.join([c.__repr__() for c in self.children]))
 
 
+def type_str_to_type(type_str):
+    if type_str.endswith('*') or type_str == 'root' or type_str == 'epsilon':
+        return type_str
+    else:
+        try:
+            type_obj = eval(type_str)
+            if is_builtin_type(type_obj):
+                return type_obj
+        except:
+            pass
+
+        try:
+            type_obj = eval('ast.' + type_str)
+            return type_obj
+        except:
+            raise RuntimeError('unidentified type string: %s' % type_str)
+
+
 def is_compositional_leaf(node):
     is_leaf = True
 

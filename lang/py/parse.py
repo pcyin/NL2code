@@ -141,6 +141,9 @@ def parse_tree_to_python_ast(tree):
 
 
 def decode_tree_to_python_ast(decode_tree):
+    from lang.py.unaryclosure import compressed_ast_to_normal
+
+    compressed_ast_to_normal(decode_tree)
     decode_tree = decode_tree.children[0]
     terminals = decode_tree.get_leaves()
 
@@ -185,6 +188,32 @@ def canonicalize_code(code):
 
     if code[-1] == ':':
         code = code + 'pass'
+
+    return code
+
+
+def de_canonicalize_code(code, ref_raw_code):
+    if code.endswith('def dummy():\n    pass'):
+        code = code.replace('def dummy():\n    pass', '').strip()
+
+    if p_elif.match(ref_raw_code):
+        # remove leading if true
+        code = code.replace('if True:\n    pass', '').strip()
+    elif p_else.match(ref_raw_code):
+        # remove leading if true
+        code = code.replace('if True:\n    pass', '').strip()
+
+    # try/catch/except stuff
+    if p_try.match(ref_raw_code):
+        code = code.replace('except:\n    pass', '').strip()
+    elif p_except.match(ref_raw_code):
+        code = code.replace('try:\n    pass', '').strip()
+    elif p_finally.match(ref_raw_code):
+        code = code.replace('try:\n    pass', '').strip()
+
+    # remove ending pass
+    if code.endswith(':\n    pass'):
+        code = code[:-len('\n    pass')]
 
     return code
 

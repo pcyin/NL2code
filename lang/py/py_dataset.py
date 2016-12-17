@@ -12,6 +12,8 @@ from nn.utils.generic_utils import init_logging
 
 from dataset import gen_vocab, DataSet, DataEntry, Action, APPLY_RULE, GEN_TOKEN, COPY_TOKEN, GEN_COPY_TOKEN
 from lang.py.parse import parse, parse_tree_to_python_ast, canonicalize_code, get_grammar, parse_raw
+from lang.py.unaryclosure import get_top_unary_closures, apply_unary_closures
+
 
 def extract_grammar(code_file, prefix='py'):
     line_num = 0
@@ -73,10 +75,10 @@ def extract_grammar(code_file, prefix='py'):
 def rule_vs_node_stat():
     line_num = 0
     parse_trees = []
-    code_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.code'
+    code_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/card_datasets/hearthstone/all_hs.out' # '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.code'
     node_nums = rule_nums = 0.
     for line in open(code_file):
-        code = line.strip()
+        code = line.replace('§', '\n').strip()
         parse_tree = parse(code)
         node_nums += len(list(parse_tree.nodes))
         rules, _ = parse_tree.get_productions()
@@ -183,9 +185,19 @@ def parse_hs_dataset():
     code_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/card_datasets/hearthstone/all_hs.out'
 
     data = preprocess_hs_dataset(annot_file, code_file)
+    parse_trees = [e['parse_tree'] for e in data]
+
+    # apply unary closures
+    unary_closures = get_top_unary_closures(parse_trees, k=20)
+    for parse_tree in parse_trees:
+        apply_unary_closures(parse_tree, unary_closures)
 
     # build the grammar
-    grammar = get_grammar([e['parse_tree'] for e in data])
+    grammar = get_grammar(parse_trees)
+
+    with open('hs.grammar.unary_closure.txt', 'w') as f:
+        for rule in grammar:
+            f.write(rule.__repr__() + '\n')
 
     annot_tokens = list(chain(*[e['query_tokens'] for e in data]))
     annot_vocab = gen_vocab(annot_tokens, vocab_size=5000, freq_cutoff=WORD_FREQ_CUT_OFF)
@@ -342,7 +354,7 @@ def parse_hs_dataset():
     test_data.init_data_matrices()
 
     serialize_to_file((train_data, dev_data, test_data),
-                      'data/hs.freq{WORD_FREQ_CUT_OFF}.pre_suf.bin'.format(WORD_FREQ_CUT_OFF=WORD_FREQ_CUT_OFF))
+                      'data/hs.freq{WORD_FREQ_CUT_OFF}.pre_suf.unary_closure.bin'.format(WORD_FREQ_CUT_OFF=WORD_FREQ_CUT_OFF))
 
     return train_data, dev_data, test_data
 
