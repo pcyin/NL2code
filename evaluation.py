@@ -17,9 +17,9 @@ def tokenize_for_bleu_eval(code):
     code = re.sub(r'\s+', ' ', code)
     code = code.replace('"', '`')
     code = code.replace('\'', '`')
+    tokens = [t for t in code.split(' ') if t]
 
-    return code.split(' ')
-
+    return tokens
 
 def evaluate(model, dataset, verbose=True):
     if verbose:
@@ -55,7 +55,7 @@ def evaluate(model, dataset, verbose=True):
     return exact_match_ratio
 
 def evaluate_decode_results(dataset, decode_results, verbose=True):
-    from lang.py.parse import tokenize_code
+    from lang.py.parse import tokenize_code, de_canonicalize_code
     # tokenize_code = tokenize_for_bleu_eval
     import ast
     assert dataset.count == len(decode_results)
@@ -71,9 +71,8 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
             for raw_id, line in enumerate(open('/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.anno')):
                 eid_to_annot[raw_id] = line.strip()
 
-        if MODE == 'hs':
-            f_bleu_eval_ref = open(dataset.name + '.ref', 'w')
-            f_bleu_eval_hyp = open(dataset.name + '.hyp', 'w')
+        f_bleu_eval_ref = open(dataset.name + '.ref', 'w')
+        f_bleu_eval_hyp = open(dataset.name + '.hyp', 'w')
 
         logging.info('evaluating [%s] set, [%d] examples', dataset.name, dataset.count)
 
@@ -94,7 +93,7 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
         example = dataset.examples[eid]
         ref_code = example.code
         ref_ast_tree = ast.parse(ref_code).body[0]
-        refer_source = astor.to_source(ref_ast_tree)
+        refer_source = astor.to_source(ref_ast_tree).strip()
         # refer_source = ref_code
         refer_tokens = tokenize_code(refer_source)
 
@@ -105,6 +104,7 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
         decode_cand = decode_cands[0]
 
         cid, cand, ast_tree, code = decode_cand
+        code = astor.to_source(ast_tree).strip()
 
         # simple_url_2_re = re.compile('_STR:0_', re.))
         try:
@@ -115,6 +115,7 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
 
         if refer_tokens == predict_tokens:
             cum_acc += 1
+            pass
 
             if verbose:
                 exact_match_ids.append(example.raw_id)
@@ -123,13 +124,41 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
                 f.write(code + '\n')
                 f.write('-' * 60 + '\n')
 
+        if MODE == 'django':
+            ref_code_for_bleu = example.meta_data['raw_code']
+            pred_code_for_bleu = de_canonicalize_code(code, example.meta_data['raw_code'])
+            # ref_code_for_bleu = de_canonicalize_code(ref_code_for_bleu, example.meta_data['raw_code'])
+            # convert canonicalized code to raw code
+            for literal, place_holder in example.meta_data['str_map'].iteritems():
+                pred_code_for_bleu = pred_code_for_bleu.replace('\'' + place_holder + '\'', literal)
+                # ref_code_for_bleu = ref_code_for_bleu.replace('\'' + place_holder + '\'', literal)
+        elif MODE == 'hs':
+            ref_code_for_bleu = ref_code
+            pred_code_for_bleu = code
+
         # we apply Ling Wang's trick when evaluating BLEU scores
-        refer_tokens_for_bleu = tokenize_for_bleu_eval(ref_code)
-        pred_tokens_for_bleu = tokenize_for_bleu_eval(code)
+        refer_tokens_for_bleu = tokenize_for_bleu_eval(ref_code_for_bleu)
+        pred_tokens_for_bleu = tokenize_for_bleu_eval(pred_code_for_bleu)
+
+        weired = False
+        if refer_tokens_for_bleu == pred_tokens_for_bleu:
+            # cum_acc += 1
+            pass
+        elif refer_tokens == predict_tokens:
+            # weired!
+            weired = True
+
+        shorter = len(pred_tokens_for_bleu) < len(refer_tokens_for_bleu)
 
         all_references.append([refer_tokens_for_bleu])
         all_predictions.append(pred_tokens_for_bleu)
-        bleu_score = sentence_bleu([refer_tokens_for_bleu], pred_tokens_for_bleu, smoothing_function=sm.method3)
+
+        # try:
+        ngram_weights = [0.25] * min(4, len(refer_tokens_for_bleu))
+        bleu_score = sentence_bleu([refer_tokens_for_bleu], pred_tokens_for_bleu, weights=ngram_weights, smoothing_function=sm.method3)
+        cum_bleu += bleu_score
+        # except:
+        #    pass
 
         if verbose:
             print 'raw_id: %d, bleu_score: %f' % (example.raw_id, bleu_score)
@@ -143,16 +172,21 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
             elif MODE == 'hs':
                 f_decode.write(' '.join(example.query) + '\n')
 
-                f_bleu_eval_ref.write(' '.join(refer_tokens_for_bleu) + '\n')
-                f_bleu_eval_hyp.write(' '.join(pred_tokens_for_bleu) + '\n')
+            f_bleu_eval_ref.write(' '.join(refer_tokens_for_bleu) + '\n')
+            f_bleu_eval_hyp.write(' '.join(pred_tokens_for_bleu) + '\n')
 
-            f_decode.write('reference: \n')
+            f_decode.write('canonicalized reference: \n')
             f_decode.write(refer_source + '\n')
-            f_decode.write('prediction: \n')
+            f_decode.write('canonicalized prediction: \n')
             f_decode.write(code + '\n')
+            f_decode.write('reference code for bleu calculation: \n')
+            f_decode.write(ref_code_for_bleu + '\n')
+            f_decode.write('predicted code for bleu calculation: \n')
+            f_decode.write(pred_code_for_bleu + '\n')
+            f_decode.write('pred_shorter_than_ref: %s\n' % shorter)
+            f_decode.write('weired: %s\n' % weired)
             f_decode.write('-' * 60 + '\n')
 
-        cum_bleu += bleu_score
 
         # compute oracle
         best_score = -1000
@@ -171,12 +205,13 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
                 pred_tokens_for_bleu = tokenize_for_bleu_eval(code)
                 bleu_score = sentence_bleu([refer_tokens_for_bleu], pred_tokens_for_bleu, smoothing_function=sm.method3)
             except:
-                print "Exception:"
-                print '-' * 60
-                print predict_tokens
-                print refer_tokens
-                traceback.print_exc(file=sys.stdout)
-                print '-' * 60
+                pass
+                # print "Exception:"
+                # print '-' * 60
+                # print predict_tokens
+                # print refer_tokens
+                # traceback.print_exc(file=sys.stdout)
+                # print '-' * 60
 
             if bleu_score > best_score:
                 best_score = bleu_score
@@ -200,9 +235,8 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
         f.close()
         f_decode.close()
 
-        if MODE == 'hs':
-            f_bleu_eval_ref.close()
-            f_bleu_eval_hyp.close()
+        f_bleu_eval_ref.close()
+        f_bleu_eval_hyp.close()
 
     return cum_bleu, cum_acc
 

@@ -96,7 +96,7 @@ class Learner(object):
 
                         val_perf = bleu
 
-                        logging.info('sentence level bleu: %f', bleu)
+                        logging.info('avg. example bleu: %f', bleu)
                         logging.info('accuracy: %f', acc)
 
                     if len(history_valid_perf) ==0 or val_perf > np.array(history_valid_perf).max():
