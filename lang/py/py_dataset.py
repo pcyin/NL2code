@@ -363,7 +363,7 @@ if __name__ == '__main__':
     init_logging('py.log')
     # rule_vs_node_stat()
     # process_heart_stone_dataset()
-    parse_hs_dataset()
+    # parse_hs_dataset()
     # code_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.code'
     # py_grammar, _ = extract_grammar(code_file)
     # serialize_to_file(py_grammar, 'py_grammar.bin')

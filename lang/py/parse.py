@@ -333,6 +333,7 @@ class Demonwrath(SpellCard):
             if minion.card.minion_type is not MINION_TYPE.DEMON:
                 minion.damage(player.effective_spell_damage(2), self)
 """
+    code = """sorted(mydict, key=mydict.get, reverse=True)"""
     # # code = """a = [1,2,3,4,'asdf', 234.3]"""
     parse_tree = parse(code)
     # for leaf in parse_tree.get_leaves():
