@@ -56,13 +56,15 @@ if __name__ == '__main__':
     if args.data:
         dataset_file = args.data
 
-
     logging.info('loading dataset [%s]', dataset_file)
     train_data, dev_data, test_data = deserialize_from_file(dataset_file)
 
-    # # get action steps statistics
-    # avg_action_num = np.average([len(e.actions) for e in train_data.examples])
-    # logging.info('avg_action_num: %d', avg_action_num)
+    # get dataset statistics
+    avg_action_num = np.average([len(e.actions) for e in train_data.examples])
+    logging.info('avg_action_num: %d', avg_action_num)
+
+    logging.info('grammar rule num.: %d', len(train_data.grammar.rules))
+    logging.info('grammar node type num.: %d', len(train_data.grammar.node_type_to_id))
 
     logging.info('source vocab size: %d', train_data.annot_vocab.size)
     logging.info('target vocab size: %d', train_data.terminal_vocab.size)
@@ -75,7 +77,7 @@ if __name__ == '__main__':
             model.load(args.model)
 
     if args.operation == 'train':
-        # train_data = train_data.get_dataset_by_ids(range(200), 'train_sample')
+        # train_data = train_data.get_dataset_by_ids(range(2000), 'train_sample')
         # dev_data = dev_data.get_dataset_by_ids(range(10), 'dev_sample')
         learner = Learner(model, train_data, dev_data)
         learner.train()
@@ -94,8 +96,9 @@ if __name__ == '__main__':
         # cProfile.run('decode_dataset(model, dataset)', sort=2)
 
         # from evaluation import decode_and_evaluate_ifttt
-        # decode_and_evaluate_ifttt(model, test_data)
-        # exit(0)
+        if MODE == 'ifttt':
+            decode_and_evaluate_ifttt(model, test_data)
+            exit(0)
 
         dataset = eval(args.type)
         decode_results = decode_python_dataset(model, dataset)
