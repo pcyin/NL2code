@@ -339,20 +339,32 @@ class CondAttLSTM(Layer):
 
         ##### feed in parent hidden state #####
 
+        if not PARENT_HIDDEN_STATE_FEEDING:
+            t = 0
+
         par_h = T.switch(t,
                          hist_h[T.arange(hist_h.shape[0]), parent_t, :],
                          T.zeros_like(h_tm1))
 
         ##### feed in parent hidden state #####
-
-        i_t = self.inner_activation(
-            xi_t + T.dot(h_tm1 * b_u[0], u_i) + T.dot(ctx_vec, c_i) + T.dot(par_h, p_i))  # + T.dot(h_ctx_vec, h_i)
-        f_t = self.inner_activation(
-            xf_t + T.dot(h_tm1 * b_u[1], u_f) + T.dot(ctx_vec, c_f) + T.dot(par_h, p_f))  # + T.dot(h_ctx_vec, h_f)
-        c_t = f_t * c_tm1 + i_t * self.activation(
-            xc_t + T.dot(h_tm1 * b_u[2], u_c) + T.dot(ctx_vec, c_c) + T.dot(par_h, p_c))  # + T.dot(h_ctx_vec, h_c)
-        o_t = self.inner_activation(
-            xo_t + T.dot(h_tm1 * b_u[3], u_o) + T.dot(ctx_vec, c_o) + T.dot(par_h, p_o))  # + T.dot(h_ctx_vec, h_o)
+        if TREE_ATTENTION:
+            i_t = self.inner_activation(
+                xi_t + T.dot(h_tm1 * b_u[0], u_i) + T.dot(ctx_vec, c_i) + T.dot(par_h, p_i) + T.dot(h_ctx_vec, h_i))
+            f_t = self.inner_activation(
+                xf_t + T.dot(h_tm1 * b_u[1], u_f) + T.dot(ctx_vec, c_f) + T.dot(par_h, p_f) + T.dot(h_ctx_vec, h_f))
+            c_t = f_t * c_tm1 + i_t * self.activation(
+                xc_t + T.dot(h_tm1 * b_u[2], u_c) + T.dot(ctx_vec, c_c) + T.dot(par_h, p_c) + T.dot(h_ctx_vec, h_c))
+            o_t = self.inner_activation(
+                xo_t + T.dot(h_tm1 * b_u[3], u_o) + T.dot(ctx_vec, c_o) + T.dot(par_h, p_o) + T.dot(h_ctx_vec, h_o))
+        else:
+            i_t = self.inner_activation(
+                xi_t + T.dot(h_tm1 * b_u[0], u_i) + T.dot(ctx_vec, c_i) + T.dot(par_h, p_i))  # + T.dot(h_ctx_vec, h_i)
+            f_t = self.inner_activation(
+                xf_t + T.dot(h_tm1 * b_u[1], u_f) + T.dot(ctx_vec, c_f) + T.dot(par_h, p_f))  # + T.dot(h_ctx_vec, h_f)
+            c_t = f_t * c_tm1 + i_t * self.activation(
+                xc_t + T.dot(h_tm1 * b_u[2], u_c) + T.dot(ctx_vec, c_c) + T.dot(par_h, p_c))  # + T.dot(h_ctx_vec, h_c)
+            o_t = self.inner_activation(
+                xo_t + T.dot(h_tm1 * b_u[3], u_o) + T.dot(ctx_vec, c_o) + T.dot(par_h, p_o))  # + T.dot(h_ctx_vec, h_o)
         h_t = o_t * self.activation(c_t)
 
         h_t = (1 - mask_t) * h_tm1 + mask_t * h_t
@@ -480,7 +492,7 @@ class CondAttLSTM(Layer):
         # (n_timestep, batch_size)
         parent_t_seq = parent_t_seq.dimshuffle((1, 0))
 
-        [outputs, cells, ctx_vectors, _], updates = theano.scan(
+        [outputs, cells, ctx_vectors, hist_h_outputs], updates = theano.scan(
             self._step,
             sequences=[time_steps, xi, xf, xo, xc, mask, parent_t_seq],
             outputs_info=[

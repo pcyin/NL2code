@@ -106,17 +106,27 @@ class Model:
                                       T.alloc(0., 1, RULE_EMBED_DIM),
                                       self.rule_embedding_W[tgt_par_rule_seq])
 
+        if not NODE_TYPE_FEEDING:
+            tgt_node_embed *= 0.
+
+        if not PARENT_RULE_FEEDING:
+            tgt_par_rule_embed *= 0.
+
         # (batch_size, max_example_action_num, action_embed_dim + symbol_embed_dim + action_embed_dim)
         decoder_input = T.concatenate([tgt_action_seq_embed_tm1, tgt_node_embed, tgt_par_rule_embed], axis=-1)
 
         # (batch_size, max_query_length, query_embed_dim)
         query_embed = self.query_encoder_lstm(query_token_embed, mask=query_token_embed_mask,
                                               dropout=DECODER_DROPOUT, srng=self.srng)
+
+        # (batch_size, max_example_action_num)
+        tgt_action_seq_mask = T.any(tgt_action_seq_type, axis=-1)
         
         # (batch_size, max_example_action_num, lstm_hidden_state)
         decoder_hidden_states, _, ctx_vectors = self.decoder_lstm(decoder_input,
                                                                   context=query_embed,
                                                                   context_mask=query_token_embed_mask,
+                                                                  mask=tgt_action_seq_mask,
                                                                   parent_t_seq=tgt_par_t_seq,
                                                                   dropout=DECODER_DROPOUT,
                                                                   srng=self.srng)
@@ -136,9 +146,6 @@ class Model:
 
         # (batch_size, max_example_action_num, max_query_length)
         copy_prob = self.src_ptr_net(query_embed, query_token_embed_mask, decoder_hidden_states)
-
-        # (batch_size, max_example_action_num)
-        tgt_action_seq_mask = T.any(tgt_action_seq_type, axis=-1)
 
         # (batch_size, max_example_action_num)
         rule_tgt_prob = rule_predict[T.shape_padright(T.arange(batch_size)),
@@ -229,6 +236,12 @@ class Model:
 
         # (batch_size, 1, node_embed_dim)
         par_rule_embed_reshaped = par_rule_embed.dimshuffle((0, 'x', 1))
+
+        if not NODE_TYPE_FEEDING:
+            node_embed_reshaped *= 0.
+
+        if not PARENT_RULE_FEEDING:
+            par_rule_embed_reshaped *= 0.
 
         decoder_input = T.concatenate([prev_action_embed_reshaped, node_embed_reshaped, par_rule_embed_reshaped], axis=-1)
 
