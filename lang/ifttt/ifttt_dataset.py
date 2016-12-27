@@ -261,9 +261,10 @@ def extract_turk_data():
         ref_data[url] = {'trigger_channel': d[2], 'trigger_func': d[3], 'action_channel': d[4], 'action_func': d[5]}
 
     lt_three_agree_with_gold = []
-    omit_non_english = []
-    omit_unintelligible = []
+    non_english_examples = []
+    unintelligible_examples = []
     for url, annots in annot_data.iteritems():
+        vote_dict = defaultdict(int)
         ref = ref_data[url]
         match_with_gold_num = 0
         non_english_num = unintelligible_num = 0
@@ -274,6 +275,7 @@ def extract_turk_data():
             if annot['trigger_channel'] == ref['trigger_channel'] and annot['trigger_func'] == ref['trigger_func'] and \
                 annot['action_channel'] == ref['action_channel'] and annot['action_func'] == ref['action_func']:
                 match_with_gold_num += 1
+            vote_dict['#'.join(annot.values())] += 1
 
         for i, annot in enumerate(annots):
             if annot['trigger_channel'] == 'nonenglish' and annot['trigger_func'] == 'nonenglish' and \
@@ -286,19 +288,25 @@ def extract_turk_data():
                 unintelligible_num += 1
                 unintelligible_annots.append(i)
 
-        if non_english_num < 2: # len(annots) - non_english_num:
-            omit_non_english.append(url)
+        max_vote_num = max(vote_dict.values())
+
+        # omitting descriptions marked as non-English by a majority of the crowdsourced workers
+        if non_english_num >= max_vote_num:
+            non_english_examples.append(url)
 
         non_english_and_unintelligible_num = len(set(non_english_annots).union(set(unintelligible_annots)))
-        if non_english_and_unintelligible_num < len(annots) - non_english_and_unintelligible_num:
-            omit_unintelligible.append(url)
+        # if this example has no non_english and unintelligible annotations
+        if non_english_and_unintelligible_num > 0: # < len(annots) - non_english_and_unintelligible_num:
+            unintelligible_examples.append(url)
 
         if match_with_gold_num >= 3:
             lt_three_agree_with_gold.append(url)
 
-    print len(omit_non_english)
-    print len(omit_unintelligible)
-    print len(lt_three_agree_with_gold)
+    omit_non_english_examples = set(annot_data) - set(non_english_examples)
+    omit_unintelligible_examples = set(annot_data) - set(unintelligible_examples)
+    print len(omit_non_english_examples) # should be 3,741
+    print len(omit_unintelligible_examples) # should be 2,262
+    print len(lt_three_agree_with_gold) # should be 758
 
     url2id = defaultdict(count(0).next)
     for url in ref_data:
@@ -312,6 +320,6 @@ def extract_turk_data():
 
 if __name__ == '__main__':
     init_logging('ifttt.log')
-    parse_ifttt_dataset()
+    # parse_ifttt_dataset()
     # analyze_ifttt_dataset()
-    # extract_turk_data()
+    extract_turk_data()

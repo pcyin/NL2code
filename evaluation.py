@@ -344,6 +344,10 @@ def ifttt_metric(predict_parse_tree, ref_parse_tree):
                     predict_parse_tree['ACTION'].children[0].children[0].type == ref_parse_tree['ACTION'].children[0].children[0].type:
         channel_func_acc += 1.
 
+    # predict_parse_tree is of type DecodingTree, different from reference tree!
+    # if predict_parse_tree == ref_parse_tree:
+    #     channel_func_acc += 1.
+
     # prod. F1
     ref_rules, _ = ref_parse_tree.get_productions()
     predict_rules, _ = predict_parse_tree.get_productions()
