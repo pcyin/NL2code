@@ -14,6 +14,8 @@ from itertools import chain
 from nn.utils.io_utils import serialize_to_file, deserialize_from_file
 
 from config import *
+from lang.py.parse import get_grammar
+from lang.py.unaryclosure import get_top_unary_closures, apply_unary_closures
 
 
 class Action(object):
@@ -356,9 +358,24 @@ def parse_django_dataset():
     for e in data:
         e['parse_tree'] = parse_raw(e['code'])
 
-    # build grammar ...
-    from lang.py.py_dataset import extract_grammar
-    grammar, all_parse_trees = extract_grammar(code_file)
+    parse_trees = [e['parse_tree'] for e in data]
+
+    # apply unary closures
+    unary_closures = get_top_unary_closures(parse_trees, k=0, freq=300)
+    for i, parse_tree in enumerate(parse_trees):
+        apply_unary_closures(parse_tree, unary_closures)
+
+    # build the grammar
+    grammar = get_grammar(parse_trees)
+
+    # write grammar
+    with open('django.grammar.unary_closure.txt', 'w') as f:
+        for rule in grammar:
+            f.write(rule.__repr__() + '\n')
+
+    # # build grammar ...
+    # from lang.py.py_dataset import extract_grammar
+    # grammar, all_parse_trees = extract_grammar(code_file)
 
     annot_tokens = list(chain(*[e['query_tokens'] for e in data]))
     annot_vocab = gen_vocab(annot_tokens, vocab_size=5000, freq_cutoff=5) # gen_vocab(annot_tokens, vocab_size=5980)
@@ -520,7 +537,7 @@ def parse_django_dataset():
     dev_data.init_data_matrices()
     test_data.init_data_matrices()
 
-    serialize_to_file((train_data, dev_data, test_data), 'data/django.cleaned.dataset.freq5.par_info.refact.space_only.bin')
+    serialize_to_file((train_data, dev_data, test_data), 'data/django.cleaned.dataset.freq5.par_info.refact.space_only.unary_closure.freq300.bin')
 
     return train_data, dev_data, test_data
 
@@ -771,6 +788,6 @@ if __name__== '__main__':
 
     # clean_dataset()
 
-    # parse_django_dataset()
-    from lang.py.py_dataset import parse_hs_dataset
-    parse_hs_dataset()
+    parse_django_dataset()
+    # from lang.py.py_dataset import parse_hs_dataset
+    # parse_hs_dataset()
