@@ -48,12 +48,12 @@ class Model:
 
         self.terminal_gen_softmax = Dense(config.decoder_hidden_dim, 2, activation='softmax', name='terminal_gen_softmax')
 
-        self.rule_embedding_W = initializations.get('normal')((config.rule_num, config.decoder_hidden_dim), name='rule_embedding_W')
+        self.rule_embedding_W = initializations.get('normal')((config.rule_num, config.decoder_hidden_dim), name='rule_embedding_W', scale=0.1)
         self.rule_embedding_b = shared_zeros(config.rule_num, name='rule_embedding_b')
 
-        self.node_embedding = initializations.get('normal')((config.node_num, config.node_embed_dim), name='node_embed')
+        self.node_embedding = initializations.get('normal')((config.node_num, config.node_embed_dim), name='node_embed', scale=0.1)
 
-        self.vocab_embedding_W = initializations.get('normal')((config.target_vocab_size, config.decoder_hidden_dim), name='vocab_embedding_W')
+        self.vocab_embedding_W = initializations.get('normal')((config.target_vocab_size, config.decoder_hidden_dim), name='vocab_embedding_W', scale=0.1)
         self.vocab_embedding_b = shared_zeros(config.target_vocab_size, name='vocab_embedding_b')
 
         # self.rule_encoder_lstm.params
