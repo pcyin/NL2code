@@ -24,7 +24,7 @@ class PointerNet(Layer):
 
         self.dense1_input = Dense(config.encoder_hidden_dim, config.ptrnet_hidden_dim, activation='linear', name='Dense1_input')
 
-        self.dense1_h = Dense(config.decoder_hidden_dim, config.ptrnet_hidden_dim, activation='linear', name='Dense1_h')
+        self.dense1_h = Dense(config.decoder_hidden_dim + config.encoder_hidden_dim, config.ptrnet_hidden_dim, activation='linear', name='Dense1_h')
 
         self.dense2 = Dense(config.ptrnet_hidden_dim, 1, activation='linear', name='Dense2')
 
@@ -32,9 +32,9 @@ class PointerNet(Layer):
 
         self.set_name(name)
 
-    def __call__(self, query_embed, query_token_embed_mask, decoder_hidden_states):
+    def __call__(self, query_embed, query_token_embed_mask, decoder_states):
         query_embed_trans = self.dense1_input(query_embed)
-        h_trans = self.dense1_h(decoder_hidden_states)
+        h_trans = self.dense1_h(decoder_states)
 
         query_embed_trans = query_embed_trans.dimshuffle((0, 'x', 1, 2))
         h_trans = h_trans.dimshuffle((0, 1, 'x', 2))

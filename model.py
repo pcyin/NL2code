@@ -126,7 +126,8 @@ class Model:
         # (batch_size, max_example_action_num)
         tgt_action_seq_mask = T.any(tgt_action_seq_type, axis=-1)
         
-        # (batch_size, max_example_action_num, lstm_hidden_state)
+        # decoder_hidden_states: (batch_size, max_example_action_num, lstm_hidden_state)
+        # ctx_vectors: (batch_size, max_example_action_num, encoder_hidden_dim)
         decoder_hidden_states, _, ctx_vectors = self.decoder_lstm(decoder_input,
                                                                   context=query_embed,
                                                                   context_mask=query_token_embed_mask,
@@ -148,8 +149,11 @@ class Model:
         # (batch_size, max_example_action_num, target_vocab_size)
         vocab_predict = softmax(T.dot(decoder_hidden_states, T.transpose(self.vocab_embedding_W)) + self.vocab_embedding_b)
 
+        # (batch_size, max_example_action_num, lstm_hidden_state + encoder_hidden_dim)
+        ptr_net_decoder_state = T.concatenate([decoder_hidden_states, ctx_vectors], axis=-1)
+
         # (batch_size, max_example_action_num, max_query_length)
-        copy_prob = self.src_ptr_net(query_embed, query_token_embed_mask, decoder_hidden_states)
+        copy_prob = self.src_ptr_net(query_embed, query_token_embed_mask, ptr_net_decoder_state)
 
         # (batch_size, max_example_action_num)
         rule_tgt_prob = rule_predict[T.shape_padright(T.arange(batch_size)),
@@ -277,7 +281,9 @@ class Model:
 
         vocab_prob = softmax(T.dot(decoder_next_state, T.transpose(self.vocab_embedding_W)) + self.vocab_embedding_b)
 
-        copy_prob = self.src_ptr_net(query_embed, query_token_embed_mask, decoder_next_state_dim3)
+        ptr_net_decoder_state = T.concatenate([decoder_next_state_dim3, ctx_vectors], axis=-1)
+
+        copy_prob = self.src_ptr_net(query_embed, query_token_embed_mask, ptr_net_decoder_state)
 
         copy_prob = copy_prob.flatten(2)
 
