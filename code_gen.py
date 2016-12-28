@@ -41,7 +41,7 @@ parser.add_argument('-encoder_hidden_dim', default=256, type=int)
 parser.add_argument('-decoder_hidden_dim', default=256, type=int)
 parser.add_argument('-attention_hidden_dim', default=50, type=int)
 parser.add_argument('-ptrnet_hidden_dim', default=50, type=int)
-parser.add_argument('-dropout', default=0.2, type=int)
+parser.add_argument('-dropout', default=0.2, type=float)
 
 # encoder
 parser.add_argument('-encoder', default='bilstm', choices=['bilstm', 'lstm'])
