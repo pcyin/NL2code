@@ -90,6 +90,7 @@ if __name__ == '__main__':
 
     np.random.seed(args.random_seed)
     init_logging(os.path.join(args.output_dir, 'parser.log'), logging.INFO)
+    logging.info('command line: %s', ' '.join(sys.argv))
 
     logging.info('loading dataset [%s]', args.data)
     train_data, dev_data, test_data = deserialize_from_file(args.data)
