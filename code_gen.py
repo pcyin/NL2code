@@ -21,7 +21,7 @@ from nn.utils.io_utils import deserialize_from_file, serialize_to_file
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-data')
-parser.add_argument('-random_seed', default=181783)
+parser.add_argument('-random_seed', default=181783, type=int)
 parser.add_argument('-output_dir', default='.outputs')
 parser.add_argument('-model', default=None)
 
@@ -29,19 +29,19 @@ parser.add_argument('-model', default=None)
 parser.add_argument('-data_type', default='django', choices=['django', 'ifttt', 'hs'])
 
 # neural model's parameters
-parser.add_argument('-source_vocab_size', default=0)
-parser.add_argument('-target_vocab_size', default=0)
-parser.add_argument('-rule_num', default=0)
-parser.add_argument('-node_num', default=0)
+parser.add_argument('-source_vocab_size', default=0, type=int)
+parser.add_argument('-target_vocab_size', default=0, type=int)
+parser.add_argument('-rule_num', default=0, type=int)
+parser.add_argument('-node_num', default=0, type=int)
 
-parser.add_argument('-word_embed_dim', default=128)
-parser.add_argument('-rule_embed_dim', default=256)
-parser.add_argument('-node_embed_dim', default=256)
-parser.add_argument('-encoder_hidden_dim', default=256)
-parser.add_argument('-decoder_hidden_dim', default=256)
-parser.add_argument('-attention_hidden_dim', default=50)
-parser.add_argument('-ptrnet_hidden_dim', default=50)
-parser.add_argument('-dropout', default=0.2)
+parser.add_argument('-word_embed_dim', default=128, type=int)
+parser.add_argument('-rule_embed_dim', default=256, type=int)
+parser.add_argument('-node_embed_dim', default=256, type=int)
+parser.add_argument('-encoder_hidden_dim', default=256, type=int)
+parser.add_argument('-decoder_hidden_dim', default=256, type=int)
+parser.add_argument('-attention_hidden_dim', default=50, type=int)
+parser.add_argument('-ptrnet_hidden_dim', default=50, type=int)
+parser.add_argument('-dropout', default=0.2, type=int)
 
 # encoder
 parser.add_argument('-encoder', default='bilstm', choices=['bilstm', 'lstm'])
@@ -53,16 +53,16 @@ parser.add_argument('-frontier_node_type_feed', default=True, type=bool)
 parser.add_argument('-tree_attention', default=False, type=bool)
 
 # training
-parser.add_argument('-train_patience', default=10)
-parser.add_argument('-max_epoch', default=50)
-parser.add_argument('-batch_size', default=10)
-parser.add_argument('-valid_per_batch', default=4000)
-parser.add_argument('-save_per_batch', default=4000)
+parser.add_argument('-train_patience', default=10, type=int)
+parser.add_argument('-max_epoch', default=50, type=int)
+parser.add_argument('-batch_size', default=10, type=int)
+parser.add_argument('-valid_per_batch', default=4000, type=int)
+parser.add_argument('-save_per_batch', default=4000, type=int)
 
 # decoding
-parser.add_argument('-beam_size', default=15)
-parser.add_argument('-max_query_length', default=70)
-parser.add_argument('-decode_max_time_step', default=100)
+parser.add_argument('-beam_size', default=15, type=int)
+parser.add_argument('-max_query_length', default=70, type=int)
+parser.add_argument('-decode_max_time_step', default=100, type=int)
 
 sub_parsers = parser.add_subparsers(dest='operation', help='operation to take')
 train_parser = sub_parsers.add_parser('train')
