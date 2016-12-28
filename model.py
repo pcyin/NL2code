@@ -55,7 +55,7 @@ class Model:
         self.vocab_embedding_b = shared_zeros(config.target_vocab_size, name='vocab_embedding_b')
 
         # self.rule_encoder_lstm.params
-        self.params = self.query_embedding.params + self.query_encoder_lstm.params + \
+        self.params = self.node_embedding.params + self.query_embedding.params + self.query_encoder_lstm.params + \
                       self.decoder_lstm.params + self.src_ptr_net.params + self.terminal_gen_softmax.params + \
                       [self.rule_embedding_W, self.rule_embedding_b, self.vocab_embedding_W, self.vocab_embedding_b]
 
