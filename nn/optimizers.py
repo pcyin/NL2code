@@ -43,7 +43,7 @@ class Optimizer(object):
 
         if hasattr(self, 'clip_grad') and self.clip_grad > 0:
             norm = T.sqrt(sum([T.sum(g ** 2) for g in grads]))
-            norm = theano.printing.Print('gradient norm::')(norm)
+            # norm = theano.printing.Print('gradient norm::')(norm)
             grads = [clip_norm(g, self.clip_grad, norm) for g in grads]
 
         return grads
