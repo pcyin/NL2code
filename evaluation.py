@@ -11,6 +11,9 @@ from nn.utils.generic_utils import init_logging
 from model import *
 
 
+DJANGO_ANNOT_FILE = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.anno'
+
+
 def tokenize_for_bleu_eval(code):
     code = re.sub(r'([^A-Za-z0-9_])', r' \1 ', code)
     code = re.sub(r'([a-z])([A-Z])', r'\1 \2', code)
@@ -29,7 +32,7 @@ def evaluate(model, dataset, verbose=True):
 
     for example in dataset.examples:
         logging.info('evaluating example [%d]' % example.eid)
-        hyps, hyp_scores = model.decode(example, max_time_step=MAX_EXAMPLE_ACTION_NUM)
+        hyps, hyp_scores = model.decode(example, max_time_step=config.decode_max_time_step)
         gold_rules = example.rules
 
         if len(hyps) == 0:
@@ -67,8 +70,8 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
         f_decode = open(dataset.name + '.decode_results.txt', 'w')
         eid_to_annot = dict()
 
-        if MODE == 'django':
-            for raw_id, line in enumerate(open('/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.anno')):
+        if config.data_type == 'django':
+            for raw_id, line in enumerate(open(DJANGO_ANNOT_FILE)):
                 eid_to_annot[raw_id] = line.strip()
 
         f_bleu_eval_ref = open(dataset.name + '.ref', 'w')
@@ -124,7 +127,7 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
                 f.write(code + '\n')
                 f.write('-' * 60 + '\n')
 
-        if MODE == 'django':
+        if config.data_type == 'django':
             ref_code_for_bleu = example.meta_data['raw_code']
             pred_code_for_bleu = de_canonicalize_code(code, example.meta_data['raw_code'])
             # ref_code_for_bleu = de_canonicalize_code(ref_code_for_bleu, example.meta_data['raw_code'])
@@ -132,7 +135,7 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
             for literal, place_holder in example.meta_data['str_map'].iteritems():
                 pred_code_for_bleu = pred_code_for_bleu.replace('\'' + place_holder + '\'', literal)
                 # ref_code_for_bleu = ref_code_for_bleu.replace('\'' + place_holder + '\'', literal)
-        elif MODE == 'hs':
+        elif config.data_type == 'hs':
             ref_code_for_bleu = ref_code
             pred_code_for_bleu = code
 
@@ -167,9 +170,9 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
             f_decode.write('example_id: %d\n' % example.raw_id)
             f_decode.write('intent: \n')
 
-            if MODE == 'django':
+            if config.data_type == 'django':
                 f_decode.write(eid_to_annot[example.raw_id] + '\n')
-            elif MODE == 'hs':
+            elif config.data_type == 'hs':
                 f_decode.write(' '.join(example.query) + '\n')
 
             f_bleu_eval_ref.write(' '.join(refer_tokens_for_bleu) + '\n')
@@ -358,7 +361,7 @@ def ifttt_metric(predict_parse_tree, ref_parse_tree):
 
 
 def decode_and_evaluate_ifttt(model, test_data):
-    raw_ids = [int(i.strip()) for i in open('data/ifff.test_data.gold.id')]
+    raw_ids = [int(i.strip()) for i in open(config.ifttt_test_split)]  # 'data/ifff.test_data.gold.id'
     eids  = [i for i, e in enumerate(test_data.examples) if e.raw_id in raw_ids]
     test_data_subset = test_data.get_dataset_by_ids(eids, test_data.name + '.subset')
 

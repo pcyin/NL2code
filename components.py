@@ -12,7 +12,7 @@ import nn.initializations as initializations
 import nn.activations as activations
 import nn.optimizers as optimizers
 
-from config import *
+import config
 from lang.grammar import Grammar
 from parse import *
 from astnode import *
@@ -22,11 +22,11 @@ class PointerNet(Layer):
     def __init__(self, name='PointerNet'):
         super(PointerNet, self).__init__()
 
-        self.dense1_input = Dense(QUERY_DIM, POINTER_NET_HIDDEN_DIM, activation='linear', name='Dense1_input')
+        self.dense1_input = Dense(config.encoder_hidden_dim, config.ptrnet_hidden_dim, activation='linear', name='Dense1_input')
 
-        self.dense1_h = Dense(LSTM_STATE_DIM, POINTER_NET_HIDDEN_DIM, activation='linear', name='Dense1_h')
+        self.dense1_h = Dense(config.decoder_hidden_dim, config.ptrnet_hidden_dim, activation='linear', name='Dense1_h')
 
-        self.dense2 = Dense(POINTER_NET_HIDDEN_DIM, 1, activation='linear', name='Dense2')
+        self.dense2 = Dense(config.ptrnet_hidden_dim, 1, activation='linear', name='Dense2')
 
         self.params += self.dense1_input.params + self.dense1_h.params + self.dense2.params
 
@@ -339,7 +339,7 @@ class CondAttLSTM(Layer):
 
         ##### feed in parent hidden state #####
 
-        if not PARENT_HIDDEN_STATE_FEEDING:
+        if not config.parent_hidden_state_feed:
             t = 0
 
         par_h = T.switch(t,
@@ -347,7 +347,7 @@ class CondAttLSTM(Layer):
                          T.zeros_like(h_tm1))
 
         ##### feed in parent hidden state #####
-        if TREE_ATTENTION:
+        if config.tree_attention:
             i_t = self.inner_activation(
                 xi_t + T.dot(h_tm1 * b_u[0], u_i) + T.dot(ctx_vec, c_i) + T.dot(par_h, p_i) + T.dot(h_ctx_vec, h_i))
             f_t = self.inner_activation(

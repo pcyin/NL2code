@@ -13,10 +13,20 @@ from itertools import chain
 
 from nn.utils.io_utils import serialize_to_file, deserialize_from_file
 
-from config import *
+import config
 from lang.py.parse import get_grammar
 from lang.py.unaryclosure import get_top_unary_closures, apply_unary_closures
 
+# define actions
+APPLY_RULE = 0
+GEN_TOKEN = 1
+COPY_TOKEN = 2
+GEN_COPY_TOKEN = 3
+
+ACTION_NAMES = {APPLY_RULE: 'APPLY_RULE',
+                GEN_TOKEN: 'GEN_TOKEN',
+                COPY_TOKEN: 'COPY_TOKEN',
+                GEN_COPY_TOKEN: 'GEN_COPY_TOKEN'}
 
 class Action(object):
     def __init__(self, act_type, data):
@@ -205,7 +215,7 @@ class DataSet:
         return data
 
 
-    def init_data_matrices(self):
+    def init_data_matrices(self, max_query_length=70, max_example_action_num=100):
         logging.info('init data matrices for [%s] dataset', self.name)
         annot_vocab = self.annot_vocab
         terminal_vocab = self.terminal_vocab
@@ -213,16 +223,16 @@ class DataSet:
         # np.max([len(e.query) for e in self.examples])
         # np.max([len(e.rules) for e in self.examples])
 
-        query_tokens = self.data_matrix['query_tokens'] = np.zeros((self.count, MAX_QUERY_LENGTH), dtype='int32')
-        tgt_node_seq = self.data_matrix['tgt_node_seq'] = np.zeros((self.count, MAX_EXAMPLE_ACTION_NUM), dtype='int32')
-        tgt_par_rule_seq = self.data_matrix['tgt_par_rule_seq'] = np.zeros((self.count, MAX_EXAMPLE_ACTION_NUM), dtype='int32')
-        tgt_par_t_seq = self.data_matrix['tgt_par_t_seq'] = np.zeros((self.count, MAX_EXAMPLE_ACTION_NUM), dtype='int32')
-        tgt_action_seq = self.data_matrix['tgt_action_seq'] = np.zeros((self.count, MAX_EXAMPLE_ACTION_NUM, 3), dtype='int32')
-        tgt_action_seq_type = self.data_matrix['tgt_action_seq_type'] = np.zeros((self.count, MAX_EXAMPLE_ACTION_NUM, 3), dtype='int32')
+        query_tokens = self.data_matrix['query_tokens'] = np.zeros((self.count, max_query_length), dtype='int32')
+        tgt_node_seq = self.data_matrix['tgt_node_seq'] = np.zeros((self.count, max_example_action_num), dtype='int32')
+        tgt_par_rule_seq = self.data_matrix['tgt_par_rule_seq'] = np.zeros((self.count, max_example_action_num), dtype='int32')
+        tgt_par_t_seq = self.data_matrix['tgt_par_t_seq'] = np.zeros((self.count, max_example_action_num), dtype='int32')
+        tgt_action_seq = self.data_matrix['tgt_action_seq'] = np.zeros((self.count, max_example_action_num, 3), dtype='int32')
+        tgt_action_seq_type = self.data_matrix['tgt_action_seq_type'] = np.zeros((self.count, max_example_action_num, 3), dtype='int32')
 
         for eid, example in enumerate(self.examples):
-            exg_query_tokens = example.query[:MAX_QUERY_LENGTH]
-            exg_action_seq = example.actions[:MAX_EXAMPLE_ACTION_NUM]
+            exg_query_tokens = example.query[:max_query_length]
+            exg_action_seq = example.actions[:max_example_action_num]
 
             for tid, token in enumerate(exg_query_tokens):
                 token_id = annot_vocab[token]
@@ -349,6 +359,7 @@ def parse_django_dataset_nt_only():
 def parse_django_dataset():
     from lang.py.parse import parse_raw
     from lang.util import escape
+    MAX_QUERY_LENGTH = 70
 
     annot_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.anno'
     code_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.code'
@@ -585,7 +596,7 @@ def check_terminals():
 
 def query_to_data(query, annot_vocab):
     query_tokens = query.split(' ')
-    token_num = min(MAX_QUERY_LENGTH, len(query_tokens))
+    token_num = min(config.max_qeury_length, len(query_tokens))
     data = np.zeros((1, token_num), dtype='int32')
 
     for tid, token in enumerate(query_tokens[:token_num]):

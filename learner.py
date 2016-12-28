@@ -3,13 +3,13 @@ from nn.utils.generic_utils import *
 
 import logging
 import numpy as np
-import sys
+import sys, os
 import time
 
 import decoder
 import evaluation
 from dataset import *
-from config import *
+import config
 
 
 class Learner(object):
@@ -29,8 +29,8 @@ class Learner(object):
         nb_train_sample = dataset.count
         index_array = np.arange(nb_train_sample)
 
-        nb_epoch = MAX_EPOCH
-        batch_size = BATCH_SIZE
+        nb_epoch = config.max_epoch
+        batch_size = config.batch_size
 
         logging.info('begin training')
         cum_updates = 0
@@ -79,10 +79,10 @@ class Learner(object):
                     print ', eta %ds' % (eta)
                     sys.stdout.flush()
 
-                if cum_updates % VALID_PER_MINIBATCH == 0:
+                if cum_updates % config.valid_per_batch == 0:
                     logging.info('begin validation')
 
-                    if MODE == 'ifttt':
+                    if config.data_type == 'ifttt':
                         decode_results = decoder.decode_ifttt_dataset(self.model, self.val_data, verbose=False)
                         channel_acc, channel_func_acc, prod_f1 = evaluation.evaluate_ifttt_results(self.val_data, decode_results, verbose=False)
 
@@ -103,18 +103,18 @@ class Learner(object):
                         best_model_params = self.model.pull_params()
                         patience_counter = 0
                         logging.info('save current best model')
-                        self.model.save('model.npz')
+                        self.model.save(os.path.join(config.output_dir, 'model.npz'))
                     else:
                         patience_counter += 1
                         logging.info('hitting patience_counter: %d', patience_counter)
-                        if patience_counter > TRAIN_PATIENCE:
+                        if patience_counter > config.train_patience:
                             logging.info('Early Stop!')
                             early_stop = True
                             break
                     history_valid_perf.append(val_perf)
 
-                if cum_updates % SAVE_PER_MINIBATCH == 0:
-                    self.model.save('model.iter%d' % cum_updates)
+                if cum_updates % config.save_per_batch == 0:
+                    self.model.save(os.path.join(config.output_dir, 'model.iter%d' % cum_updates))
 
             logging.info('[Epoch %d] cumulative loss = %f, (took %ds)',
                          epoch,
@@ -125,7 +125,7 @@ class Learner(object):
                 break
 
         logging.info('training finished, save the best model')
-        np.savez('model.npz', **best_model_params)
+        np.savez(os.path.join(config.output_dir, 'model.npz'), **best_model_params)
 
 
 class DataIterator:

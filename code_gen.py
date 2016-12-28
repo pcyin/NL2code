@@ -20,44 +20,93 @@ from nn.utils.generic_utils import init_logging
 from nn.utils.io_utils import deserialize_from_file, serialize_to_file
 
 parser = argparse.ArgumentParser()
-sub_parsers = parser.add_subparsers(dest='operation')
+parser.add_argument('-data')
+parser.add_argument('-random_seed', default=181783)
+parser.add_argument('-output_dir', default='.outputs')
+parser.add_argument('-model', default=None)
+
+# model's main configuration
+parser.add_argument('-data_type', default='django', choices=['django', 'ifttt', 'hs'])
+
+# neural model's parameters
+parser.add_argument('-source_vocab_size', default=0)
+parser.add_argument('-target_vocab_size', default=0)
+parser.add_argument('-rule_num', default=0)
+parser.add_argument('-node_num', default=0)
+
+parser.add_argument('-word_embed_dim', default=128)
+parser.add_argument('-rule_embed_dim', default=256)
+parser.add_argument('-node_embed_dim', default=256)
+parser.add_argument('-encoder_hidden_dim', default=256)
+parser.add_argument('-decoder_hidden_dim', default=256)
+parser.add_argument('-attention_hidden_dim', default=50)
+parser.add_argument('-ptrnet_hidden_dim', default=50)
+parser.add_argument('-dropout', default=0.2)
+
+# encoder
+parser.add_argument('-encoder', default='bilstm', choices=['bilstm', 'lstm'])
+
+# decoder
+parser.add_argument('-parent_hidden_state_feed', default=True, type=bool)
+parser.add_argument('-parent_action_feed', default=True, type=bool)
+parser.add_argument('-frontier_node_type_feed', default=True, type=bool)
+parser.add_argument('-tree_attention', default=False, type=bool)
+
+# training
+parser.add_argument('-train_patience', default=10)
+parser.add_argument('-max_epoch', default=50)
+parser.add_argument('-batch_size', default=10)
+parser.add_argument('-valid_per_batch', default=4000)
+parser.add_argument('-save_per_batch', default=4000)
+
+# decoding
+parser.add_argument('-beam_size', default=15)
+parser.add_argument('-max_query_length', default=70)
+parser.add_argument('-decode_max_time_step', default=100)
+
+sub_parsers = parser.add_subparsers(dest='operation', help='operation to take')
 train_parser = sub_parsers.add_parser('train')
 decode_parser = sub_parsers.add_parser('decode')
 interactive_parser = sub_parsers.add_parser('interactive')
 evaluate_parser = sub_parsers.add_parser('evaluate')
 
-def parse_args():
-    parser.add_argument('-data')
-    parser.add_argument('-model', default=None)
-    parser.add_argument('-conf', default='config.py', help='config file name')
+# decoding operation
+decode_parser.add_argument('-saveto', default='decode_results.bin')
+decode_parser.add_argument('-type', default='test_data')
 
-    decode_parser.add_argument('-saveto', default='decode_results.bin')
-    decode_parser.add_argument('-type', default='test_data')
+# evaluation operation
+evaluate_parser.add_argument('-input', default='decode_results.bin')
+evaluate_parser.add_argument('-type', default='test_data')
+evaluate_parser.add_argument('-ifttt_test_split', default='data/ifff.test_data.gold.id')
 
-    evaluate_parser.add_argument('-input', default='decode_results.bin')
-    evaluate_parser.add_argument('-type', default='test_data')
-
-    interactive_parser.add_argument('-mode', default='dataset')
-
-    args = parser.parse_args()
-
-    return args
+# interactive operation
+interactive_parser.add_argument('-mode', default='dataset')
 
 if __name__ == '__main__':
-    init_logging('parser.log', logging.INFO)
-    args = parse_args()
+    args = parser.parse_args()
 
-    logging.info('current config: %s', config_info)
+    if not os.path.exists(args.output_dir):
+        os.makedirs(args.output_dir)
 
-    np.random.seed(181783)
+    np.random.seed(args.random_seed)
+    init_logging(os.path.join(args.output_dir, 'parser.log'), logging.INFO)
 
-    dataset_file = 'data/django.cleaned.dataset.freq5.bin'
+    logging.info('loading dataset [%s]', args.data)
+    train_data, dev_data, test_data = deserialize_from_file(args.data)
 
-    if args.data:
-        dataset_file = args.data
+    if not args.source_vocab_size:
+        args.source_vocab_size = train_data.annot_vocab.size
+    if not args.target_vocab_size:
+        args.target_vocab_size = train_data.terminal_vocab.size
+    if not args.rule_num:
+        args.rule_num = len(train_data.grammar.rules)
+    if not args.node_num:
+        args.node_num = len(train_data.grammar.node_type_to_id)
 
-    logging.info('loading dataset [%s]', dataset_file)
-    train_data, dev_data, test_data = deserialize_from_file(dataset_file)
+    logging.info('current config: %s', args)
+    config_module = sys.modules['config']
+    for name, value in vars(args).iteritems():
+        setattr(config_module, name, value)
 
     # get dataset statistics
     avg_action_num = np.average([len(e.actions) for e in train_data.examples])
@@ -96,7 +145,7 @@ if __name__ == '__main__':
         # cProfile.run('decode_dataset(model, dataset)', sort=2)
 
         # from evaluation import decode_and_evaluate_ifttt
-        if MODE == 'ifttt':
+        if args.data_type == 'ifttt':
             decode_and_evaluate_ifttt(model, test_data)
             exit(0)
 
@@ -139,7 +188,7 @@ if __name__ == '__main__':
                 print example.parse_tree
 
             cand_list = model.decode(example, train_data.grammar, train_data.terminal_vocab,
-                                     beam_size=BEAM_SIZE, max_time_step=DECODE_MAX_TIME_STEP)
+                                     beam_size=args.beam_size, max_time_step=args.decode_max_time_step)
 
             for cid, cand in enumerate(cand_list[:10]):
                 print '*' * 60

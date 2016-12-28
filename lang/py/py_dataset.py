@@ -349,9 +349,9 @@ def parse_hs_dataset():
     logging.info('max_query_len: %d', max_query_len)
     logging.info('max_actions_len: %d', max_actions_len)
 
-    train_data.init_data_matrices()
-    dev_data.init_data_matrices()
-    test_data.init_data_matrices()
+    train_data.init_data_matrices(max_query_length=70, max_example_action_num=350)
+    dev_data.init_data_matrices(max_query_length=70, max_example_action_num=350)
+    test_data.init_data_matrices(max_query_length=70, max_example_action_num=350)
 
     serialize_to_file((train_data, dev_data, test_data),
                       'data/hs.freq{WORD_FREQ_CUT_OFF}.pre_suf.unary_closure.bin'.format(WORD_FREQ_CUT_OFF=WORD_FREQ_CUT_OFF))

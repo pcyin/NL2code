@@ -225,7 +225,7 @@ def parse_ifttt_dataset():
     logging.info('max_query_len: %d', max_query_len)
     logging.info('max_actions_len: %d', max_actions_len)
 
-    train_data.init_data_matrices()
+    train_data.init_data_matrices(max_query_length=40, max_example_action_num=6)
     dev_data.init_data_matrices()
     test_data.init_data_matrices()
 
