@@ -178,7 +178,7 @@ class Model:
         # let's build the function!
         train_inputs = [query_tokens, tgt_action_seq, tgt_action_seq_type,
                         tgt_node_seq, tgt_par_rule_seq, tgt_par_t_seq]
-        optimizer = optimizers.get('adam')
+        optimizer = optimizers.get(config.optimizer)
         updates, grads = optimizer.get_updates(self.params, loss)
         self.train_func = theano.function(train_inputs, [loss],
                                           # [loss, tgt_action_seq_type, tgt_action_seq,
