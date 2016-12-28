@@ -227,11 +227,11 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
     cum_oracle_bleu /= dataset.count
     cum_oracle_acc /= dataset.count
 
-    print 'corpus level bleu: %f' % corpus_bleu(all_references, all_predictions, smoothing_function=sm.method3)
-    print 'sentence level bleu: %f' % cum_bleu
-    print 'accuracy: %f' % cum_acc
-    print 'oracle bleu: %f' % cum_oracle_bleu
-    print 'oracle accuracy: %f' % cum_oracle_acc
+    logging.info('corpus level bleu: %f', corpus_bleu(all_references, all_predictions, smoothing_function=sm.method3))
+    logging.info('sentence level bleu: %f', cum_bleu)
+    logging.info('accuracy: %f', cum_acc)
+    logging.info('oracle bleu: %f', cum_oracle_bleu)
+    logging.info('oracle accuracy: %f', cum_oracle_acc)
 
     if verbose:
         f.write(', '.join(str(i) for i in exact_match_ids))
