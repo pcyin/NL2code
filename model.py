@@ -29,7 +29,7 @@ sys.setrecursionlimit(50000)
 
 class Model:
     def __init__(self):
-        self.node_embedding = Embedding(config.node_num, config.node_embed_dim, name='node_embed')
+        # self.node_embedding = Embedding(config.node_num, config.node_embed_dim, name='node_embed')
 
         self.query_embedding = Embedding(config.source_vocab_size, config.word_embed_dim, name='query_embed')
 
@@ -48,16 +48,18 @@ class Model:
 
         self.terminal_gen_softmax = Dense(config.decoder_hidden_dim, 2, activation='softmax', name='terminal_gen_softmax')
 
-        self.rule_embedding_W = initializations.get('glorot_uniform')((config.rule_num, config.decoder_hidden_dim), name='rule_embedding_W')
+        self.rule_embedding_W = initializations.get('normal')((config.rule_num, config.decoder_hidden_dim), name='rule_embedding_W')
         self.rule_embedding_b = shared_zeros(config.rule_num, name='rule_embedding_b')
 
-        self.vocab_embedding_W = initializations.get('glorot_uniform')((config.target_vocab_size, config.decoder_hidden_dim), name='vocab_embedding_W')
+        self.node_embedding = initializations.get('normal')((config.node_num, config.node_embed_dim), name='node_embed')
+
+        self.vocab_embedding_W = initializations.get('normal')((config.target_vocab_size, config.decoder_hidden_dim), name='vocab_embedding_W')
         self.vocab_embedding_b = shared_zeros(config.target_vocab_size, name='vocab_embedding_b')
 
         # self.rule_encoder_lstm.params
-        self.params = self.node_embedding.params + self.query_embedding.params + self.query_encoder_lstm.params + \
+        self.params = self.query_embedding.params + self.query_encoder_lstm.params + \
                       self.decoder_lstm.params + self.src_ptr_net.params + self.terminal_gen_softmax.params + \
-                      [self.rule_embedding_W, self.rule_embedding_b, self.vocab_embedding_W, self.vocab_embedding_b]
+                      [self.rule_embedding_W, self.rule_embedding_b, self.node_embedding, self.vocab_embedding_W, self.vocab_embedding_b]
 
         self.srng = RandomStreams()
 
@@ -78,7 +80,8 @@ class Model:
         tgt_par_t_seq = ndim_itensor(2, 'tgt_par_t_seq')
 
         # (batch_size, max_example_action_num, symbol_embed_dim)
-        tgt_node_embed = self.node_embedding(tgt_node_seq, mask_zero=False)
+        # tgt_node_embed = self.node_embedding(tgt_node_seq, mask_zero=False)
+        tgt_node_embed = self.node_embedding[tgt_node_seq]
 
         # (batch_size, max_query_length)
         query_tokens = ndim_itensor(2, 'query_tokens')
@@ -209,7 +212,7 @@ class Model:
         node_id = T.ivector(name='node_id')
 
         # (batch_size, node_embed_dim)
-        node_embed = self.node_embedding(node_id)
+        node_embed = self.node_embedding[node_id]
 
         # (batch_size)
         par_rule_id = T.ivector(name='par_rule_id')
@@ -566,8 +569,7 @@ class Model:
 
         for p_name, p in self.params_dict.iteritems():
             if p_name not in weights_dict:
-                logging.error('parameter [%s] not in saved weights file', p_name)
-                return 1
+                raise RuntimeError('parameter [%s] not in saved weights file', p_name)
             else:
                 logging.info('loading parameter [%s]', p_name)
                 assert np.array_equal(p.shape.eval(), weights_dict[p_name].shape), \
