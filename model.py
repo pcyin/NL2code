@@ -57,13 +57,17 @@ class Model:
         self.vocab_embedding_b = shared_zeros(config.target_vocab_size, name='vocab_embedding_b')
 
         # decoder_hidden_dim -> action embed
-        self.decoder_hidden_state_dense = Dense(config.decoder_hidden_dim, config.rule_embed_dim, name='decoder_hidden_state_trans')
+        self.decoder_hidden_state_W_rule = Dense(config.decoder_hidden_dim, config.rule_embed_dim, name='decoder_hidden_state_W_rule')
+
+        # decoder_hidden_dim -> action embed
+        self.decoder_hidden_state_W_token= Dense(config.decoder_hidden_dim + config.encoder_hidden_dim, config.rule_embed_dim,
+                                                 name='decoder_hidden_state_W_token')
 
         # self.rule_encoder_lstm.params
         self.params = self.query_embedding.params + self.query_encoder_lstm.params + \
                       self.decoder_lstm.params + self.src_ptr_net.params + self.terminal_gen_softmax.params + \
                       [self.rule_embedding_W, self.rule_embedding_b, self.node_embedding, self.vocab_embedding_W, self.vocab_embedding_b] + \
-                      self.decoder_hidden_state_dense.params
+                      self.decoder_hidden_state_W_rule.params + self.decoder_hidden_state_W_token.params
 
         self.srng = RandomStreams()
 
@@ -149,16 +153,17 @@ class Model:
         # predicting actions
         # ====================================================
 
-        decoder_hidden_state_trans = self.decoder_hidden_state_dense(decoder_hidden_states)
+        decoder_hidden_state_trans_rule = self.decoder_hidden_state_W_rule(decoder_hidden_states)
+        decoder_hidden_state_trans_token = self.decoder_hidden_state_W_token(T.concatenate([decoder_hidden_states, ctx_vectors], axis=-1))
 
         # (batch_size, max_example_action_num, rule_num)
-        rule_predict = softmax(T.dot(decoder_hidden_state_trans, T.transpose(self.rule_embedding_W)) + self.rule_embedding_b)
+        rule_predict = softmax(T.dot(decoder_hidden_state_trans_rule, T.transpose(self.rule_embedding_W)) + self.rule_embedding_b)
 
         # (batch_size, max_example_action_num, 2)
         terminal_gen_action_prob = self.terminal_gen_softmax(decoder_hidden_states)
 
         # (batch_size, max_example_action_num, target_vocab_size)
-        vocab_predict = softmax(T.dot(decoder_hidden_state_trans, T.transpose(self.vocab_embedding_W)) + self.vocab_embedding_b)
+        vocab_predict = softmax(T.dot(decoder_hidden_state_trans_token, T.transpose(self.vocab_embedding_W)) + self.vocab_embedding_b)
 
         # (batch_size, max_example_action_num, lstm_hidden_state + encoder_hidden_dim)
         ptr_net_decoder_state = T.concatenate([decoder_hidden_states, ctx_vectors], axis=-1)
@@ -286,13 +291,14 @@ class Model:
 
         decoder_next_cell = decoder_next_cell_dim3.flatten(2)
 
-        decoder_next_state_trans = self.decoder_hidden_state_dense(decoder_next_state)
+        decoder_next_state_trans_rule = self.decoder_hidden_state_W_rule(decoder_next_state)
+        decoder_next_state_trans_token = self.decoder_hidden_state_W_token(T.concatenate([decoder_next_state, ctx_vectors.flatten(2)], axis=-1))
 
-        rule_prob = softmax(T.dot(decoder_next_state_trans, T.transpose(self.rule_embedding_W)) + self.rule_embedding_b)
+        rule_prob = softmax(T.dot(decoder_next_state_trans_rule, T.transpose(self.rule_embedding_W)) + self.rule_embedding_b)
 
         gen_action_prob = self.terminal_gen_softmax(decoder_next_state)
 
-        vocab_prob = softmax(T.dot(decoder_next_state_trans, T.transpose(self.vocab_embedding_W)) + self.vocab_embedding_b)
+        vocab_prob = softmax(T.dot(decoder_next_state_trans_token, T.transpose(self.vocab_embedding_W)) + self.vocab_embedding_b)
 
         ptr_net_decoder_state = T.concatenate([decoder_next_state_dim3, ctx_vectors], axis=-1)
 
