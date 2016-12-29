@@ -354,7 +354,7 @@ def parse_hs_dataset():
     test_data.init_data_matrices(max_query_length=70, max_example_action_num=350)
 
     serialize_to_file((train_data, dev_data, test_data),
-                      'data/hs.freq{WORD_FREQ_CUT_OFF}.pre_suf.unary_closure.bin'.format(WORD_FREQ_CUT_OFF=WORD_FREQ_CUT_OFF))
+                      'data/hs.freq{WORD_FREQ_CUT_OFF}.max_action350.pre_suf.unary_closure.bin'.format(WORD_FREQ_CUT_OFF=WORD_FREQ_CUT_OFF))
 
     return train_data, dev_data, test_data
 
@@ -363,7 +363,7 @@ if __name__ == '__main__':
     init_logging('py.log')
     # rule_vs_node_stat()
     # process_heart_stone_dataset()
-    # parse_hs_dataset()
+    parse_hs_dataset()
     # code_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.code'
     # py_grammar, _ = extract_grammar(code_file)
     # serialize_to_file(py_grammar, 'py_grammar.bin')

@@ -174,10 +174,10 @@ def compressed_ast_to_normal(parse_tree):
         # return parse_tree
 
 
-def match_sub_tree(parse_tree, cur_match_node):
+def match_sub_tree(parse_tree, cur_match_node, is_root=False):
     cur_level_match = False
-    if parse_tree.type == cur_match_node.type and parse_tree.label == cur_match_node.label \
-            and (len(parse_tree.children) == 1 or cur_match_node.is_leaf):
+    if parse_tree.type == cur_match_node.type and (len(parse_tree.children) == 1 or cur_match_node.is_leaf) and \
+            (is_root or parse_tree.label == cur_match_node.label):
         cur_level_match = True
 
     if cur_level_match:
@@ -192,7 +192,7 @@ def match_sub_tree(parse_tree, cur_match_node):
 
 def find(parse_tree, sub_tree):
     match_results = []
-    last_node = match_sub_tree(parse_tree, sub_tree)
+    last_node = match_sub_tree(parse_tree, sub_tree, True)
 
     if last_node:
         match_results.append((parse_tree, last_node))
