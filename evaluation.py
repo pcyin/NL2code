@@ -1,6 +1,7 @@
 # -*- coding: UTF-8 -*-
 
 from __future__ import division
+import os
 
 from nltk.translate.bleu_score import sentence_bleu, corpus_bleu, SmoothingFunction
 import logging
@@ -251,7 +252,7 @@ def evaluate_ifttt_results(dataset, decode_results, verbose=True):
     if verbose:
         f = open(dataset.name + '.exact_match', 'w')
         exact_match_ids = []
-        f_decode = open(dataset.name + '.decode_results.txt', 'w')
+        f_decode = open(os.path.join(config.output_dir, dataset.name + '.decode_results.txt'), 'w')
 
         logging.info('evaluating [%s] set, [%d] examples', dataset.name, dataset.count)
 
