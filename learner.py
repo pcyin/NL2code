@@ -37,7 +37,9 @@ class Learner(object):
         patience_counter = 0
         early_stop = False
         history_valid_perf = []
-        best_model_params = None
+        history_valid_bleu = []
+        history_valid_acc = []
+        best_model_params = best_model_by_acc = best_model_by_bleu = None
 
         # train_data_iter = DataIterator(self.train_data, batch_size)
 
@@ -87,19 +89,29 @@ class Learner(object):
                         channel_acc, channel_func_acc, prod_f1 = evaluation.evaluate_ifttt_results(self.val_data, decode_results, verbose=False)
 
                         val_perf = channel_func_acc
-                        logging.info('channel acc: %f', channel_acc)
-                        logging.info('channel+func acc: %f', channel_func_acc)
+                        logging.info('channel accuracy: %f', channel_acc)
+                        logging.info('channel+func accuracy: %f', channel_func_acc)
                         logging.info('prod F1: %f', prod_f1)
                     else:
                         decode_results = decoder.decode_python_dataset(self.model, self.val_data, verbose=False)
-                        bleu, acc = evaluation.evaluate_decode_results(self.val_data, decode_results, verbose=False)
+                        bleu, accuracy = evaluation.evaluate_decode_results(self.val_data, decode_results, verbose=False)
 
-                        val_perf = bleu
+                        val_perf = eval(config.valid_metric)
 
                         logging.info('avg. example bleu: %f', bleu)
-                        logging.info('accuracy: %f', acc)
+                        logging.info('accuracy: %f', accuracy)
 
-                    if len(history_valid_perf) ==0 or val_perf > np.array(history_valid_perf).max():
+                        if len(history_valid_acc) == 0 or accuracy > np.array(history_valid_acc).max():
+                            best_model_by_acc = self.model.pull_params()
+                            # logging.info('current model has best accuracy')
+                        history_valid_acc.append(accuracy)
+
+                        if len(history_valid_bleu) == 0 or bleu > np.array(history_valid_bleu).max():
+                            best_model_by_bleu = self.model.pull_params()
+                            # logging.info('current model has best accuracy')
+                        history_valid_bleu.append(bleu)
+
+                    if len(history_valid_perf) == 0 or val_perf > np.array(history_valid_perf).max():
                         best_model_params = self.model.pull_params()
                         patience_counter = 0
                         logging.info('save current best model')
@@ -126,6 +138,13 @@ class Learner(object):
 
         logging.info('training finished, save the best model')
         np.savez(os.path.join(config.output_dir, 'model.npz'), **best_model_params)
+
+        if config.data_type == 'django' or config.data_type == 'hs':
+            logging.info('save the best model by accuracy')
+            np.savez(os.path.join(config.output_dir, 'model.best_acc.npz'), **best_model_by_acc)
+
+            logging.info('save the best model by bleu')
+            np.savez(os.path.join(config.output_dir, 'model.best_bleu.npz'), **best_model_by_bleu)
 
 
 class DataIterator:
