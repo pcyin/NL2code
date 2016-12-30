@@ -91,7 +91,9 @@ decode_parser.add_argument('-type', default='test_data')
 # evaluation operation
 evaluate_parser.add_argument('-input', default='decode_results.bin')
 evaluate_parser.add_argument('-type', default='test_data')
-evaluate_parser.add_argument('-ifttt_test_split', default='data/ifff.test_data.gold.id')
+
+# misc
+parser.add_argument('-ifttt_test_split', default='data/ifff.test_data.gold.id')
 
 # interactive operation
 interactive_parser.add_argument('-mode', default='dataset')
@@ -161,11 +163,11 @@ if __name__ == '__main__':
 
         # from evaluation import decode_and_evaluate_ifttt
         if args.data_type == 'ifttt':
-            decode_and_evaluate_ifttt(model, test_data)
-            exit(0)
+            decode_results = decode_and_evaluate_ifttt(model, test_data)
+        else:
+            dataset = eval(args.type)
+            decode_results = decode_python_dataset(model, dataset)
 
-        dataset = eval(args.type)
-        decode_results = decode_python_dataset(model, dataset)
         serialize_to_file(decode_results, args.saveto)
 
     if args.operation == 'evaluate':

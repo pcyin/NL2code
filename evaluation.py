@@ -370,6 +370,8 @@ def decode_and_evaluate_ifttt(model, test_data):
     decode_results = decode_ifttt_dataset(model, test_data_subset, verbose=True)
     evaluate_ifttt_results(test_data_subset, decode_results)
 
+    return decode_results
+
 
 if __name__ == '__main__':
     from dataset import DataEntry, DataSet, Vocab, Action
