@@ -107,7 +107,7 @@ class Learner(object):
                     else:
                         patience_counter += 1
                         logging.info('hitting patience_counter: %d', patience_counter)
-                        if patience_counter > config.train_patience:
+                        if patience_counter >= config.train_patience:
                             logging.info('Early Stop!')
                             early_stop = True
                             break
