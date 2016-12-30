@@ -113,6 +113,7 @@ def get_top_unary_closures(parse_trees, k=20, freq=50):
 
 
 def apply_unary_closures(parse_tree, unary_closures):
+    unary_closures = sorted(unary_closures, key=lambda x: x[0].size, reverse=True)
     original_parse_tree = parse_tree.copy()
 
     # apply all unary closures

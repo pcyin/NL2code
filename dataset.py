@@ -360,6 +360,7 @@ def parse_django_dataset():
     from lang.py.parse import parse_raw
     from lang.util import escape
     MAX_QUERY_LENGTH = 70
+    UNARY_CUTOFF_FREQ = 30
 
     annot_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.anno'
     code_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.code'
@@ -372,7 +373,7 @@ def parse_django_dataset():
     parse_trees = [e['parse_tree'] for e in data]
 
     # apply unary closures
-    unary_closures = get_top_unary_closures(parse_trees, k=0, freq=300)
+    unary_closures = get_top_unary_closures(parse_trees, k=0, freq=UNARY_CUTOFF_FREQ)
     for i, parse_tree in enumerate(parse_trees):
         apply_unary_closures(parse_tree, unary_closures)
 
@@ -548,7 +549,8 @@ def parse_django_dataset():
     dev_data.init_data_matrices()
     test_data.init_data_matrices()
 
-    serialize_to_file((train_data, dev_data, test_data), 'data/django.cleaned.dataset.freq5.par_info.refact.space_only.unary_closure.freq300.bin')
+    serialize_to_file((train_data, dev_data, test_data),
+                      'data/django.cleaned.dataset.freq5.par_info.refact.space_only.unary_closure.freq{UNARY_CUTOFF_FREQ}.order_by_ulink_len.bin'.format(UNARY_CUTOFF_FREQ=UNARY_CUTOFF_FREQ))
 
     return train_data, dev_data, test_data
 
