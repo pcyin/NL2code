@@ -186,10 +186,15 @@ class Model:
                                   T.shape_padleft(T.arange(max_example_action_num)),
                                   tgt_action_seq[:, :, 2]]
 
+        if config.enable_copy:
+            copy_mask = tgt_action_seq_type[:, :, 2]
+        else:
+            copy_mask = 0.
+
         # (batch_size, max_example_action_num)
         tgt_prob = tgt_action_seq_type[:, :, 0] * rule_tgt_prob + \
                    tgt_action_seq_type[:, :, 1] * terminal_gen_action_prob[:, :, 0] * vocab_tgt_prob + \
-                   tgt_action_seq_type[:, :, 2] * terminal_gen_action_prob[:, :, 1] * copy_tgt_prob
+                   copy_mask * terminal_gen_action_prob[:, :, 1] * copy_tgt_prob
 
         likelihood = T.log(tgt_prob + 1.e-7 * (1 - tgt_action_seq_mask))
         loss = - (likelihood * tgt_action_seq_mask).sum(axis=-1) # / tgt_action_seq_mask.sum(axis=-1)

@@ -63,6 +63,10 @@ parser.add_argument('-tree_attention', dest='tree_attention', action='store_true
 parser.add_argument('-no_tree_attention', dest='tree_attention', action='store_false')
 parser.set_defaults(tree_attention=False)
 
+parser.add_argument('-enable_copy', dest='enable_copy', action='store_true')
+parser.add_argument('-no_copy', dest='enable_copy', action='store_false')
+parser.set_defaults(enable_copy=True)
+
 # training
 parser.add_argument('-optimizer', default='adam')
 parser.add_argument('-clip_grad', default=0., type=float)
