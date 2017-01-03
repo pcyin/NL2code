@@ -245,6 +245,87 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
     return cum_bleu, cum_acc
 
 
+def evaluate_seq2tree_sample_file(sample_file, id_file, dataset):
+    from lang.py.parse import tokenize_code, de_canonicalize_code
+    import ast, astor
+    import traceback
+    from lang.py.seq2tree_exp import seq2tree_repr_to_ast_tree, merge_broken_value_nodes
+    from lang.py.parse import decode_tree_to_python_ast
+
+    f_sample = open(sample_file)
+    line_id_to_raw_id = OrderedDict()
+    raw_id_to_eid = OrderedDict()
+    for i, line in enumerate(open(id_file)):
+        raw_id = int(line.strip())
+        line_id_to_raw_id[i] = raw_id
+
+    for eid in range(len(dataset.examples)):
+        raw_id_to_eid[dataset.examples[eid].raw_id] = eid
+
+    cum_bleu = 0.0
+    cum_acc = 0.0
+    sm = SmoothingFunction()
+    convert_error_num = 0
+
+    for i in range(len(line_id_to_raw_id)):
+        print 'working on %d' % i
+        ref_repr = f_sample.readline().strip()
+        predict_repr = f_sample.readline().strip()
+        predict_repr = predict_repr.replace('<U>', 'str{}{unk}').replace('( )', '( str{}{unk} )')
+        f_sample.readline()
+
+        try:
+            parse_tree = seq2tree_repr_to_ast_tree(predict_repr)
+            merge_broken_value_nodes(parse_tree)
+        except:
+            print 'error when converting:'
+            print predict_repr
+            convert_error_num += 1
+            continue
+
+        raw_id = line_id_to_raw_id[i]
+        eid = raw_id_to_eid[raw_id]
+        example = dataset.examples[eid]
+
+        ref_code = example.code
+        ref_ast_tree = ast.parse(ref_code).body[0]
+        refer_source = astor.to_source(ref_ast_tree).strip()
+        refer_tokens = tokenize_code(refer_source)
+
+        try:
+            ast_tree = decode_tree_to_python_ast(parse_tree)
+            code = astor.to_source(ast_tree).strip()
+        except:
+            print "Exception in converting tree to code:"
+            print '-' * 60
+            print 'line id: %d' % i
+            traceback.print_exc(file=sys.stdout)
+            print '-' * 60
+
+        if config.data_type == 'django':
+            ref_code_for_bleu = example.meta_data['raw_code']
+            pred_code_for_bleu = de_canonicalize_code(code, example.meta_data['raw_code'])
+            # convert canonicalized code to raw code
+            for literal, place_holder in example.meta_data['str_map'].iteritems():
+                pred_code_for_bleu = pred_code_for_bleu.replace('\'' + place_holder + '\'', literal)
+        elif config.data_type == 'hs':
+            ref_code_for_bleu = ref_code
+            pred_code_for_bleu = code
+
+        # we apply Ling Wang's trick when evaluating BLEU scores
+        refer_tokens_for_bleu = tokenize_for_bleu_eval(ref_code_for_bleu)
+        pred_tokens_for_bleu = tokenize_for_bleu_eval(pred_code_for_bleu)
+
+        ngram_weights = [0.25] * min(4, len(refer_tokens_for_bleu))
+        bleu_score = sentence_bleu([refer_tokens_for_bleu], pred_tokens_for_bleu, weights=ngram_weights,
+                                   smoothing_function=sm.method3)
+        cum_bleu += bleu_score
+
+    cum_bleu /= len(line_id_to_raw_id)
+    logging.info('num. errors when converting repr to tree: %d', convert_error_num)
+    logging.info('sentence level bleu: %f', cum_bleu)
+
+
 def evaluate_ifttt_results(dataset, decode_results, verbose=True):
     assert dataset.count == len(decode_results)
 

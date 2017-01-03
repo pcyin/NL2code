@@ -373,9 +373,9 @@ def parse_django_dataset():
     parse_trees = [e['parse_tree'] for e in data]
 
     # apply unary closures
-    unary_closures = get_top_unary_closures(parse_trees, k=0, freq=UNARY_CUTOFF_FREQ)
-    for i, parse_tree in enumerate(parse_trees):
-        apply_unary_closures(parse_tree, unary_closures)
+    # unary_closures = get_top_unary_closures(parse_trees, k=0, freq=UNARY_CUTOFF_FREQ)
+    # for i, parse_tree in enumerate(parse_trees):
+    #     apply_unary_closures(parse_tree, unary_closures)
 
     # build the grammar
     grammar = get_grammar(parse_trees)
@@ -390,7 +390,7 @@ def parse_django_dataset():
     # grammar, all_parse_trees = extract_grammar(code_file)
 
     annot_tokens = list(chain(*[e['query_tokens'] for e in data]))
-    annot_vocab = gen_vocab(annot_tokens, vocab_size=5000, freq_cutoff=5) # gen_vocab(annot_tokens, vocab_size=5980)
+    annot_vocab = gen_vocab(annot_tokens, vocab_size=5000, freq_cutoff=3) # gen_vocab(annot_tokens, vocab_size=5980)
 
     terminal_token_seq = []
     empty_actions_count = 0
@@ -428,7 +428,7 @@ def parse_django_dataset():
                     assert len(terminal_token) > 0
                     terminal_token_seq.append(terminal_token)
 
-    terminal_vocab = gen_vocab(terminal_token_seq, vocab_size=5000, freq_cutoff=5)
+    terminal_vocab = gen_vocab(terminal_token_seq, vocab_size=5000, freq_cutoff=3)
     assert '_STR:0_' in terminal_vocab
 
     train_data = DataSet(annot_vocab, terminal_vocab, grammar, 'train_data')
@@ -550,7 +550,8 @@ def parse_django_dataset():
     test_data.init_data_matrices()
 
     serialize_to_file((train_data, dev_data, test_data),
-                      'data/django.cleaned.dataset.freq5.par_info.refact.space_only.unary_closure.freq{UNARY_CUTOFF_FREQ}.order_by_ulink_len.bin'.format(UNARY_CUTOFF_FREQ=UNARY_CUTOFF_FREQ))
+                      'data/django.cleaned.dataset.freq3.par_info.refact.space_only.order_by_ulink_len.bin')
+                      # 'data/django.cleaned.dataset.freq5.par_info.refact.space_only.unary_closure.freq{UNARY_CUTOFF_FREQ}.order_by_ulink_len.bin'.format(UNARY_CUTOFF_FREQ=UNARY_CUTOFF_FREQ))
 
     return train_data, dev_data, test_data
 

@@ -11,21 +11,32 @@ def escape(text):
         .replace(' ', '-SP-') \
         .replace('\t', '-TAB-') \
         .replace('\n', '-NL-') \
+        .replace('\r', '-NL2-') \
         .replace('(', '-LRB-') \
         .replace(')', '-RRB-') \
         .replace('|', '-BAR-')
-    return repr(text)[1:-1] if text else '-NONE-'
+
+    if text is None:
+        return '-NONE-'
+    elif text == '':
+        return '-EMPTY-'
+
+    return text
 
 def unescape(text):
+    if text == '-NONE-':
+        return None
+
     text = text \
         .replace('-``-', '"') \
         .replace('-`-', '\'') \
         .replace('-SP-', ' ') \
-        .replace('-TAB-', '\\t') \
-        .replace('-NL-', '\\n') \
+        .replace('-TAB-', '\t') \
+        .replace('-NL-', '\n') \
+        .replace('-NL2-', '\r') \
         .replace('-LRB-', '(') \
         .replace('-RRB-', ')') \
         .replace('-BAR-', '|') \
-        .replace('-NONE-', '')
+        .replace('-EMPTY-', '')
 
     return text

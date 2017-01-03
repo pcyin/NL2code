@@ -93,8 +93,11 @@ decode_parser.add_argument('-saveto', default='decode_results.bin')
 decode_parser.add_argument('-type', default='test_data')
 
 # evaluation operation
+evaluate_parser.add_argument('-mode', default='self')
 evaluate_parser.add_argument('-input', default='decode_results.bin')
 evaluate_parser.add_argument('-type', default='test_data')
+evaluate_parser.add_argument('-seq2tree_sample_file', default='model.sample')
+evaluate_parser.add_argument('-seq2tree_id_file', default='test.id.txt')
 
 # misc
 parser.add_argument('-ifttt_test_split', default='data/ifff.test_data.gold.id')
@@ -175,11 +178,15 @@ if __name__ == '__main__':
         serialize_to_file(decode_results, args.saveto)
 
     if args.operation == 'evaluate':
-        decode_results_file = args.input
         dataset = eval(args.type)
-        decode_results = deserialize_from_file(decode_results_file)
+        if config.mode == 'self':
+            decode_results_file = args.input
+            decode_results = deserialize_from_file(decode_results_file)
 
-        evaluate_decode_results(dataset, decode_results)
+            evaluate_decode_results(dataset, decode_results)
+        elif config.mode == 'seq2tree':
+            from evaluation import evaluate_seq2tree_sample_file
+            evaluate_seq2tree_sample_file(config.seq2tree_sample_file, config.seq2tree_id_file, dataset)
 
     if args.operation == 'interactive':
         from dataset import canonicalize_query, query_to_data
