@@ -66,6 +66,20 @@ class Learner(object):
 
                 inputs = dataset.get_prob_func_inputs(batch_ids)
 
+                if not config.enable_copy:
+                    tgt_action_seq = inputs[1]
+                    tgt_action_seq_type = inputs[2]
+
+                    for i in xrange(cur_batch_size):
+                        for t in xrange(tgt_action_seq[i].shape[0]):
+                            if tgt_action_seq_type[i, t, 2] == 1:
+                                # can only be copied
+                                if tgt_action_seq_type[i, t, 1] == 0:
+                                    tgt_action_seq_type[i, t, 1] = 1
+                                    tgt_action_seq[i, t, 1] = 1  # index of <unk>
+
+                                tgt_action_seq_type[i, t, 2] = 0
+
                 train_func_outputs = self.model.train_func(*inputs)
                 batch_loss = train_func_outputs[0]
                 logging.debug('prob_func finished computing')
