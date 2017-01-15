@@ -81,6 +81,9 @@ parser.add_argument('-valid_metric', default='bleu')
 parser.add_argument('-beam_size', default=15, type=int)
 parser.add_argument('-max_query_length', default=70, type=int)
 parser.add_argument('-decode_max_time_step', default=100, type=int)
+parser.add_argument('-head_nt_constraint', dest='head_nt_constraint', action='store_true')
+parser.add_argument('-no_head_nt_constraint', dest='head_nt_constraint', action='store_false')
+parser.set_defaults(head_nt_constraint=True)
 
 sub_parsers = parser.add_subparsers(dest='operation', help='operation to take')
 train_parser = sub_parsers.add_parser('train')
@@ -98,6 +101,8 @@ evaluate_parser.add_argument('-input', default='decode_results.bin')
 evaluate_parser.add_argument('-type', default='test_data')
 evaluate_parser.add_argument('-seq2tree_sample_file', default='model.sample')
 evaluate_parser.add_argument('-seq2tree_id_file', default='test.id.txt')
+evaluate_parser.add_argument('-seq2seq_decode_file')
+evaluate_parser.add_argument('-seq2seq_ref_file')
 
 # misc
 parser.add_argument('-ifttt_test_split', default='data/ifff.test_data.gold.id')
@@ -187,6 +192,15 @@ if __name__ == '__main__':
         elif config.mode == 'seq2tree':
             from evaluation import evaluate_seq2tree_sample_file
             evaluate_seq2tree_sample_file(config.seq2tree_sample_file, config.seq2tree_id_file, dataset)
+        elif config.mode == 'seq2seq':
+            from evaluation import evaluate_seq2seq_decode_results
+            evaluate_seq2seq_decode_results(dataset, config.seq2seq_decode_file, config.seq2seq_ref_file)
+        elif config.mode == 'analyze':
+            from evaluation import analyze_decode_results
+
+            decode_results_file = args.input
+            decode_results = deserialize_from_file(decode_results_file)
+            analyze_decode_results(dataset, decode_results)
 
     if args.operation == 'interactive':
         from dataset import canonicalize_query, query_to_data
@@ -216,9 +230,12 @@ if __name__ == '__main__':
                 print example.parse_tree
 
             cand_list = model.decode(example, train_data.grammar, train_data.terminal_vocab,
-                                     beam_size=args.beam_size, max_time_step=args.decode_max_time_step)
+                                     beam_size=args.beam_size, max_time_step=args.decode_max_time_step, log=True)
 
-            for cid, cand in enumerate(cand_list[:10]):
+            has_grammar_error = any([c for c in cand_list if c.has_grammar_error])
+            print 'has_grammar_error: ', has_grammar_error
+
+            for cid, cand in enumerate(cand_list[:5]):
                 print '*' * 60
                 print 'cand #%d, score: %f' % (cid, cand.score)
 
@@ -226,6 +243,7 @@ if __name__ == '__main__':
                     ast_tree = decode_tree_to_python_ast(cand.tree)
                     code = astor.to_source(ast_tree)
                     print 'code: ', code
+                    print 'decode log: ', cand.log
                 except:
                     print "Exception in converting tree to code:"
                     print '-' * 60
@@ -233,6 +251,7 @@ if __name__ == '__main__':
                     traceback.print_exc(file=sys.stdout)
                     print '-' * 60
                 finally:
+                    print '* parse tree *'
                     print cand.tree.__repr__()
                     print 'n_timestep: %d' % cand.n_timestep
                     print 'ast size: %d' % cand.tree.size
