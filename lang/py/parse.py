@@ -218,6 +218,32 @@ def de_canonicalize_code(code, ref_raw_code):
     return code
 
 
+def de_canonicalize_code_for_seq2seq(code, ref_raw_code):
+    if code.endswith('\ndef dummy(): pass'):
+        code = code.replace('\ndef dummy(): pass', '').strip()
+
+    if p_elif.match(ref_raw_code):
+        # remove leading if true
+        code = code.replace('if True: pass\n', '').strip()
+    elif p_else.match(ref_raw_code):
+        # remove leading if true
+        code = code.replace('if True: pass\n', '').strip()
+
+    # try/catch/except stuff
+    if p_try.match(ref_raw_code):
+        code = code.replace('pass\nexcept: pass', '').strip()
+    elif p_except.match(ref_raw_code):
+        code = code.replace('try: pass\n', '').strip()
+    elif p_finally.match(ref_raw_code):
+        code = code.replace('try: pass\n', '').strip()
+
+    # remove ending pass
+    if code.endswith(':pass'):
+        code = code[:-len('pass')]
+
+    return code.strip()
+
+
 def add_root(tree):
     root_node = ASTNode('root')
     root_node.add_child(tree)
@@ -278,6 +304,41 @@ def tokenize_code(code):
 
     return tokens
 
+
+def tokenize_code_adv(code, breakCamelStr=False):
+    token_stream = generate_tokens(StringIO(code).readline)
+    tokens = []
+    indent_level = 0
+    for toknum, tokval, (srow, scol), (erow, ecol), _ in token_stream:
+        if toknum == tk.ENDMARKER:
+            break
+
+        if toknum == tk.INDENT:
+            indent_level += 1
+            tokens.extend(['#INDENT#'] * indent_level)
+            continue
+        elif toknum == tk.DEDENT:
+            indent_level -= 1
+            tokens.extend(['#INDENT#'] * indent_level)
+            continue
+        elif len(tokens) > 0 and tokens[-1] == '\n' and tokval != '\n':
+            tokens.extend(['#INDENT#'] * indent_level)
+
+        if toknum == tk.STRING:
+            quote = tokval[0]
+            tokval = tokval[1:-1]
+            tokens.append(quote)
+
+        if breakCamelStr:
+            sub_tokens = re.sub(r'([a-z])([A-Z])', r'\1 #MERGE# \2', tokval).split(' ')
+            tokens.extend(sub_tokens)
+        else:
+            tokens.append(tokval)
+
+        if toknum == tk.STRING:
+            tokens.append(quote)
+
+    return tokens
 
 
 if __name__ == '__main__':

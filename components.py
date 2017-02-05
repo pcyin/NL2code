@@ -58,6 +58,8 @@ class Hyp:
             self.tree = hyp.tree.copy()
             self.t = hyp.t
             self.hist_h = list(hyp.hist_h)
+            self.log = hyp.log
+            self.has_grammar_error = hyp.has_grammar_error
         else:
             assert isinstance(args[0], Grammar)
             grammar = args[0]
@@ -65,6 +67,8 @@ class Hyp:
             self.tree = DecodeTree(grammar.root_node.type)
             self.t=-1
             self.hist_h = []
+            self.log = ''
+            self.has_grammar_error = False
 
         self.score = 0.0
 
@@ -101,11 +105,15 @@ class Hyp:
         if nt is None:
             nt = self.frontier_nt()
 
-        assert rule.parent.type == nt.type
+        # assert rule.parent.type == nt.type
+        if rule.parent.type != nt.type:
+            self.has_grammar_error = True
 
         self.t += 1
         # set the time step when the rule leading by this nt is applied
         nt.t = self.t
+        # record the ApplyRule action that is used to expand the current node
+        nt.applied_rule = rule
 
         for child_node in rule.children:
             child = DecodeTree(child_node.type, child_node.label, child_node.value)

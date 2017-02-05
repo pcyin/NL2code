@@ -101,6 +101,7 @@ evaluate_parser.add_argument('-input', default='decode_results.bin')
 evaluate_parser.add_argument('-type', default='test_data')
 evaluate_parser.add_argument('-seq2tree_sample_file', default='model.sample')
 evaluate_parser.add_argument('-seq2tree_id_file', default='test.id.txt')
+evaluate_parser.add_argument('-seq2tree_rareword_map', default=None)
 evaluate_parser.add_argument('-seq2seq_decode_file')
 evaluate_parser.add_argument('-seq2seq_ref_file')
 
@@ -175,7 +176,7 @@ if __name__ == '__main__':
 
         # from evaluation import decode_and_evaluate_ifttt
         if args.data_type == 'ifttt':
-            decode_results = decode_and_evaluate_ifttt(model, test_data)
+            decode_results = decode_and_evaluate_ifttt_by_split(model, test_data)
         else:
             dataset = eval(args.type)
             decode_results = decode_python_dataset(model, dataset)

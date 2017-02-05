@@ -5,7 +5,7 @@ from collections import OrderedDict
 from collections import defaultdict
 from itertools import count
 
-from nn.utils.io_utils import serialize_to_file
+from nn.utils.io_utils import serialize_to_file, deserialize_from_file
 
 from lang.ifttt.grammar import IFTTTGrammar
 from parse import ifttt_ast_to_parse_tree
@@ -119,7 +119,7 @@ def get_grammar(parse_trees):
 
 
 def parse_ifttt_dataset():
-    WORD_FREQ_CUT_OFF = 3
+    WORD_FREQ_CUT_OFF = 2
 
     annot_file = '/Users/yinpengcheng/Research/SemanticParsing/ifttt/Data/lang.all.txt'
     code_file = '/Users/yinpengcheng/Research/SemanticParsing/ifttt/Data/code.all.txt'
@@ -130,7 +130,7 @@ def parse_ifttt_dataset():
     grammar = get_grammar([e['parse_tree'] for e in data])
 
     annot_tokens = list(chain(*[e['query_tokens'] for e in data]))
-    annot_vocab = gen_vocab(annot_tokens, vocab_size=10000, freq_cutoff=WORD_FREQ_CUT_OFF)
+    annot_vocab = gen_vocab(annot_tokens, vocab_size=30000, freq_cutoff=WORD_FREQ_CUT_OFF)
 
     logging.info('annot vocab. size: %d', annot_vocab.size)
 
@@ -159,7 +159,8 @@ def parse_ifttt_dataset():
         query_token_ids = [annot_vocab[token] for token in query_tokens if token not in string.punctuation]
         valid_query_tokens_ids = [tid for tid in query_token_ids if tid != annot_vocab.unk]
 
-        if len(valid_query_tokens_ids) == 0:
+        # remove examples with rare words from train and dev, avoid overfitting
+        if len(valid_query_tokens_ids) == 0 and 0 <= idx < 77495 + 5171:
             continue
 
         rule_list, rule_parents = parse_tree.get_productions(include_value_node=True)
@@ -235,6 +236,34 @@ def parse_ifttt_dataset():
     return train_data, dev_data, test_data
 
 
+def parse_data_for_seq2seq(data_file='data/ifttt.freq3.bin'):
+    train_data, dev_data, test_data = deserialize_from_file(data_file)
+    prefix = 'data/seq2seq/'
+
+    for dataset, output in [(train_data, prefix + 'ifttt.train'),
+                            (dev_data, prefix + 'ifttt.dev'),
+                            (test_data, prefix + 'ifttt.test')]:
+        f_source = open(output + '.desc', 'w')
+        f_target = open(output + '.code', 'w')
+
+        if 'test' in output:
+            raw_ids = [int(i.strip()) for i in open('data/ifff.test_data.gold.id')]
+            eids = [i for i, e in enumerate(test_data.examples) if e.raw_id in raw_ids]
+            dataset = test_data.get_dataset_by_ids(eids, test_data.name + '.subset')
+
+        for e in dataset.examples:
+            query_tokens = e.query
+            trigger = e.parse_tree['TRIGGER'].children[0].type + ' . ' + e.parse_tree['TRIGGER'].children[0].children[0].type
+            action = e.parse_tree['ACTION'].children[0].type + ' . ' + e.parse_tree['ACTION'].children[0].children[0].type
+            code = 'IF ' + trigger + ' THEN ' + action
+
+            f_source.write(' '.join(query_tokens) + '\n')
+            f_target.write(code + '\n')
+
+        f_source.close()
+        f_target.close()
+
+
 def extract_turk_data():
     turk_annot_file = '/Users/yinpengcheng/Research/SemanticParsing/ifttt/public_release/data/turk_public.tsv'
     reference_file = '/Users/yinpengcheng/Research/SemanticParsing/ifttt/public_release/data/ifttt_public.tsv'
@@ -291,7 +320,7 @@ def extract_turk_data():
         max_vote_num = max(vote_dict.values())
 
         # omitting descriptions marked as non-English by a majority of the crowdsourced workers
-        if non_english_num >= max_vote_num:
+        if non_english_num == max_vote_num:
             non_english_examples.append(url)
 
         non_english_and_unintelligible_num = len(set(non_english_annots).union(set(unintelligible_annots)))
@@ -310,16 +339,35 @@ def extract_turk_data():
 
     url2id = defaultdict(count(0).next)
     for url in ref_data:
-        i = url2id[url]
+        url2id[url] = url2id[url] + 77495 + 5171
 
     f_gold = open('data/ifff.test_data.gold.id', 'w')
     for url in lt_three_agree_with_gold:
-        i = url2id[url] + 77495 + 5171
+        i = url2id[url]
         f_gold.write(str(i) + '\n')
     f_gold.close()
+
+    f_gold = open('data/ifff.test_data.omit_unintelligible.id', 'w')
+    for url in omit_unintelligible_examples:
+        i = url2id[url]
+        f_gold.write(str(i) + '\n')
+    f_gold.close()
+
+    f_gold = open('data/ifff.test_data.omit_non_english.id', 'w')
+    for url in omit_non_english_examples:
+        i = url2id[url]
+        f_gold.write(str(i) + '\n')
+    f_gold.close()
+
+    omit_non_english_examples = [url2id[url] for url in omit_non_english_examples]
+    omit_unintelligible_examples = [url2id[url] for url in omit_unintelligible_examples]
+    lt_three_agree_with_gold = [url2id[url] for url in lt_three_agree_with_gold]
+
+    return omit_non_english_examples, omit_unintelligible_examples, lt_three_agree_with_gold
 
 if __name__ == '__main__':
     init_logging('ifttt.log')
     # parse_ifttt_dataset()
     # analyze_ifttt_dataset()
     extract_turk_data()
+    # parse_data_for_seq2seq()

@@ -10,8 +10,9 @@ import re
 from nn.utils.io_utils import serialize_to_file, deserialize_from_file
 from nn.utils.generic_utils import init_logging
 
-from dataset import gen_vocab, DataSet, DataEntry, Action, APPLY_RULE, GEN_TOKEN, COPY_TOKEN, GEN_COPY_TOKEN
-from lang.py.parse import parse, parse_tree_to_python_ast, canonicalize_code, get_grammar, parse_raw
+from dataset import gen_vocab, DataSet, DataEntry, Action, APPLY_RULE, GEN_TOKEN, COPY_TOKEN, GEN_COPY_TOKEN, Vocab
+from lang.py.parse import parse, parse_tree_to_python_ast, canonicalize_code, get_grammar, parse_raw, \
+    de_canonicalize_code, tokenize_code, tokenize_code_adv, de_canonicalize_code_for_seq2seq
 from lang.py.unaryclosure import get_top_unary_closures, apply_unary_closures
 
 
@@ -359,11 +360,46 @@ def parse_hs_dataset():
     return train_data, dev_data, test_data
 
 
+def dump_data_for_evaluation(data_type='django', data_file='', max_query_length=70):
+    train_data, dev_data, test_data = deserialize_from_file(data_file)
+    prefix = '/Users/yinpengcheng/Projects/dl4mt-tutorial/codegen_data/'
+    for dataset, output in [(train_data, prefix + '%s.train' % data_type),
+                            (dev_data, prefix + '%s.dev' % data_type),
+                            (test_data, prefix + '%s.test' % data_type)]:
+        f_source = open(output + '.desc', 'w')
+        f_target = open(output + '.code', 'w')
+
+        for e in dataset.examples:
+            query_tokens = e.query[:max_query_length]
+            code = e.code
+            if data_type == 'django':
+                target_code = de_canonicalize_code_for_seq2seq(code, e.meta_data['raw_code'])
+            else:
+                target_code = code
+
+            # tokenize code
+            target_code = target_code.strip()
+            tokenized_target = tokenize_code_adv(target_code, breakCamelStr=False if data_type=='django' else True)
+            tokenized_target = [tk.replace('\n', '#NEWLINE#') for tk in tokenized_target]
+            tokenized_target = [tk for tk in tokenized_target if tk is not None]
+
+            while tokenized_target[-1] == '#INDENT#':
+                tokenized_target = tokenized_target[:-1]
+
+            f_source.write(' '.join(query_tokens) + '\n')
+            f_target.write(' '.join(tokenized_target) + '\n')
+
+        f_source.close()
+        f_target.close()
+
+
 if __name__ == '__main__':
     init_logging('py.log')
     # rule_vs_node_stat()
     # process_heart_stone_dataset()
     parse_hs_dataset()
+    # dump_data_for_evaluation(data_file='data/django.cleaned.dataset.freq5.par_info.refact.space_only.bin')
+    # dump_data_for_evaluation(data_type='hs', data_file='data/hs.freq3.pre_suf.unary_closure.bin')
     # code_file = '/Users/yinpengcheng/Research/SemanticParsing/CodeGeneration/en-django/all.code'
     # py_grammar, _ = extract_grammar(code_file)
     # serialize_to_file(py_grammar, 'py_grammar.bin')

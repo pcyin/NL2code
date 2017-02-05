@@ -267,9 +267,12 @@ class DecodeTree(ASTNode):
 
         # record the time step when this subtree is created from a rule application
         self.t = t
+        # record the ApplyRule action that is used to expand the current node
+        self.applied_rule = None
 
     def copy(self):
         new_tree = DecodeTree(self.type, self.label, value=self.value, t=self.t)
+        new_tree.applied_rule = self.applied_rule
         if self.is_leaf:
             return new_tree
 

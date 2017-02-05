@@ -321,7 +321,7 @@ class Model:
 
         self.decoder_func_next_step = theano.function(inputs, outputs)
 
-    def decode(self, example, grammar, terminal_vocab, beam_size, max_time_step):
+    def decode(self, example, grammar, terminal_vocab, beam_size, max_time_step, log=False):
         # beam search decoding
 
         eos = 1
@@ -410,7 +410,7 @@ class Model:
 
             hyp_frontier_nts = []
             word_gen_hyp_ids = []
-
+            cand_copy_probs = []
             unk_words = []
 
             for k in xrange(live_hyp_num):
@@ -427,7 +427,7 @@ class Model:
                 # if it's not a leaf
                 if not grammar.is_value_node(frontier_nt):
                     # iterate over all the possible rules
-                    rules = grammar[frontier_nt.as_type_node]
+                    rules = grammar[frontier_nt.as_type_node] if config.head_nt_constraint else grammar
                     assert len(rules) > 0, 'fail to expand nt node %s' % frontier_nt
                     for rule in rules:
                         rule_id = grammar.rule_to_id[rule]
@@ -441,9 +441,11 @@ class Model:
                         rule_apply_cand_rule_ids.append(rule_id)
 
                 else:  # it's a leaf that holds values
+                    cand_copy_prob = 0.0
                     for i, tid in enumerate(src_token_id):
                         if tid != -1:
                             word_prob[k, tid] += gen_action_prob[k, 1] * copy_prob[k, i]
+                            cand_copy_prob = gen_action_prob[k, 1]
 
                     # and unk copy probability
                     if len(unk_pos_list) > 0:
@@ -456,7 +458,10 @@ class Model:
                         unk_word = example.query[unk_pos]
                         unk_words.append(unk_word)
 
+                        cand_copy_prob = gen_action_prob[k, 1]
+
                     word_gen_hyp_ids.append(k)
+                    cand_copy_probs.append(cand_copy_prob)
 
             # prune the hyp space
             if completed_hyp_num >= beam_size:
@@ -516,6 +521,11 @@ class Model:
                     new_hyp = Hyp(hyp)
                     new_hyp.append_token(token)
 
+                    if log:
+                        cand_copy_prob = cand_copy_probs[word_gen_hyp_id]
+                        if cand_copy_prob > 0.5:
+                            new_hyp.log += ' || ' + str(new_hyp.frontier_nt()) + '{copy[%s][p=%f]}' % (token ,cand_copy_prob)
+
                     new_hyp.score = new_hyp_score
                     new_hyp.state = copy.copy(decoder_next_state[hyp_id])
                     new_hyp.hist_h.append(copy.copy(new_hyp.state))
@@ -538,8 +548,9 @@ class Model:
 
                 else:
                     new_hyp.node_id = grammar.get_node_type_id(new_frontier_nt.type)
-                    new_hyp.parent_rule_id = grammar.rule_to_id[
-                        new_frontier_nt.parent.to_rule(include_value=False)]
+                    # new_hyp.parent_rule_id = grammar.rule_to_id[
+                    #     new_frontier_nt.parent.to_rule(include_value=False)]
+                    new_hyp.parent_rule_id = grammar.rule_to_id[new_frontier_nt.parent.applied_rule]
 
                     new_hyp_samples.append(new_hyp)
 

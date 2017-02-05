@@ -51,6 +51,9 @@ class Grammar(object):
     def __iter__(self):
         return self.rules.__iter__()
 
+    def __len__(self):
+        return len(self.rules)
+
     def __getitem__(self, lhs):
         key_node = ASTNode(lhs.type, None)  # Rules are indexed by types only
         if key_node in self.rule_index:

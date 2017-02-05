@@ -85,19 +85,22 @@ def seq2tree_repr_to_ast_tree(tree_repr):
     return tree
 
 
-def break_value_nodes(tree):
+def break_value_nodes(tree, hs=False):
     """inplace break value nodes with a string separaed by spaces"""
     if tree.type == str and tree.value is not None:
         assert tree.is_leaf
 
-        tokens = tree.value.split(' ')
+        if hs:
+            tokens = re.sub(r'([a-z])([A-Z])', r'\1 #MERGE# \2', tree.value).split(' ')
+        else:
+            tokens = tree.value.split(' ')
         tree.value = 'NT'
         for token in tokens:
             assert token is not None
             tree.add_child(ASTNode(tree.type, value=escape(token)))
     else:
         for child in tree.children:
-            break_value_nodes(child)
+            break_value_nodes(child, hs=hs)
 
 
 def merge_broken_value_nodes(tree):
@@ -107,6 +110,7 @@ def merge_broken_value_nodes(tree):
 
         valid_children = [c for c in tree.children if c.value is not None]
         value = ' '.join(unescape(c.value) for c in valid_children)
+        value = value.replace(' #MERGE# ', '')
         tree.value = value
 
         tree.children = []
@@ -228,13 +232,13 @@ def parse_hs_dataset_for_seq2tree():
 
     decode_time_steps = defaultdict(int)
 
-    f_train = open('/Users/yinpengcheng/Research/lang2logic/seq2tree/hs/data/train.txt', 'w')
-    f_dev = open('/Users/yinpengcheng/Research/lang2logic/seq2tree/hs/data/dev.txt', 'w')
-    f_test = open('/Users/yinpengcheng/Research/lang2logic/seq2tree/hs/data/test.txt', 'w')
+    f_train = open('/Users/yinpengcheng/Research/lang2logic/seq2tree/hs/data_unkreplaced/train.txt', 'w')
+    f_dev = open('/Users/yinpengcheng/Research/lang2logic/seq2tree/hs/data_unkreplaced/dev.txt', 'w')
+    f_test = open('/Users/yinpengcheng/Research/lang2logic/seq2tree/hs/data_unkreplaced/test.txt', 'w')
 
-    f_train_rawid = open('/Users/yinpengcheng/Research/lang2logic/seq2tree/hs/data/train.id.txt', 'w')
-    f_dev_rawid = open('/Users/yinpengcheng/Research/lang2logic/seq2tree/hs/data/dev.id.txt', 'w')
-    f_test_rawid = open('/Users/yinpengcheng/Research/lang2logic/seq2tree/hs/data/test.id.txt', 'w')
+    f_train_rawid = open('/Users/yinpengcheng/Research/lang2logic/seq2tree/hs/data_unkreplaced/train.id.txt', 'w')
+    f_dev_rawid = open('/Users/yinpengcheng/Research/lang2logic/seq2tree/hs/data_unkreplaced/dev.id.txt', 'w')
+    f_test_rawid = open('/Users/yinpengcheng/Research/lang2logic/seq2tree/hs/data_unkreplaced/test.id.txt', 'w')
 
     # first pass
     for entry in data:
@@ -243,7 +247,7 @@ def parse_hs_dataset_for_seq2tree():
         parse_tree = entry['parse_tree']
 
         original_parse_tree = parse_tree.copy()
-        break_value_nodes(parse_tree)
+        break_value_nodes(parse_tree, hs=True)
         tree_repr = ast_tree_to_seq2tree_repr(parse_tree)
 
         num_decode_time_step = len(tree_repr.split(' '))
@@ -307,17 +311,17 @@ if __name__ == '__main__':
 
     original_parse_tree = parse_tree.copy()
     break_value_nodes(parse_tree)
-    tree_repr = ast_tree_to_seq2tree_repr(parse_tree)
 
-    print tree_repr
+    # tree_repr = """root{}{} ( For{}{} ( expr{target}{} ( Name{}{} ( str{id}{NT} ( ) ) ) expr{iter}{} ( Name{}{} ( str{id}{NT} ( Name{}{} ( str{id}{NT} ( str{}{self} ) ) ) ) ) stmt*{body}{} ( stmt{}{} ( Pass{}{} ) ) ) )"""
+    # print tree_repr
 
-    new_tree = seq2tree_repr_to_ast_tree(tree_repr)
-    merge_broken_value_nodes(new_tree)
+    # new_tree = seq2tree_repr_to_ast_tree(tree_repr)
+    # merge_broken_value_nodes(new_tree)
 
-    print str(original_parse_tree)
-    print str(new_tree)
+    # print str(original_parse_tree)
+    # print str(new_tree)
 
-    assert original_parse_tree == new_tree
+    # assert original_parse_tree == new_tree
 
     # parse_django_dataset_for_seq2tree()
     parse_hs_dataset_for_seq2tree()

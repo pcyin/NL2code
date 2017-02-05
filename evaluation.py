@@ -472,7 +472,7 @@ def analyze_decode_results(dataset, decode_results, verbose=True):
 
     import matplotlib.pyplot as plt
     from pylab import rcParams
-    rcParams['figure.figsize'] = 6, 3
+    rcParams['figure.figsize'] = 6, 2.5
 
     if config.data_type == 'django':
         fig, ax = plt.subplots()
@@ -482,7 +482,7 @@ def analyze_decode_results(dataset, decode_results, verbose=True):
         # ax.plot(X, Y[3], 'r^--', label='oracle acc', lw=1.2)
         ax.set_ylabel('Performance')
         ax.set_xlabel('Reference AST Size (# nodes)')
-        plt.legend(loc='upper right')
+        plt.legend(loc='upper right', ncol=6)
         plt.tight_layout()
         # plt.savefig('django_acc_ast_size.pdf', dpi=300)
         # os.system('pcrop.sh django_acc_ast_size.pdf')
@@ -496,7 +496,7 @@ def analyze_decode_results(dataset, decode_results, verbose=True):
         # ax.plot(X, Y[3], 'r^--', label='oracle acc', lw=1.2)
         ax.set_ylabel('Performance')
         ax.set_xlabel('Reference AST Size (# nodes)')
-        plt.legend(loc='upper right')
+        plt.legend(loc='upper right', ncol=6)
         plt.tight_layout()
         # plt.savefig('hs_bleu_ast_size.pdf', dpi=300)
         # os.system('pcrop.sh hs_bleu_ast_size.pdf')
@@ -584,17 +584,35 @@ def evaluate_seq2tree_sample_file(sample_file, id_file, dataset):
     for eid in range(len(dataset.examples)):
         raw_id_to_eid[dataset.examples[eid].raw_id] = eid
 
+    rare_word_map = defaultdict(dict)
+    if config.seq2tree_rareword_map:
+        logging.info('use rare word map')
+        for i, line in enumerate(open(config.seq2tree_rareword_map)):
+            line = line.strip()
+            if line:
+                for e in line.split(' '):
+                    d = e.split(':', 1)
+                    rare_word_map[i][int(d[0])] = d[1]
+
     cum_bleu = 0.0
     cum_acc = 0.0
     sm = SmoothingFunction()
     convert_error_num = 0
 
     for i in range(len(line_id_to_raw_id)):
-        print 'working on %d' % i
+        # print 'working on %d' % i
         ref_repr = f_sample.readline().strip()
         predict_repr = f_sample.readline().strip()
-        predict_repr = predict_repr.replace('<U>', 'str{}{unk}').replace('( )', '( str{}{unk} )')
+        predict_repr = predict_repr.replace('<U>', 'str{}{unk}') # .replace('( )', '( str{}{unk} )')
         f_sample.readline()
+
+        # if ' ( ) ' in ref_repr:
+        #     print i, ref_repr
+
+        if i in rare_word_map:
+            for unk_id, w in rare_word_map[i].iteritems():
+                ref_repr = ref_repr.replace(' str{}{unk_%s} ' % unk_id, ' str{}{%s} ' % w)
+                predict_repr = predict_repr.replace(' str{}{unk_%s} ' % unk_id, ' str{}{%s} ' % w)
 
         try:
             parse_tree = seq2tree_repr_to_ast_tree(predict_repr)
@@ -641,7 +659,8 @@ def evaluate_seq2tree_sample_file(sample_file, id_file, dataset):
         pred_tokens_for_bleu = tokenize_for_bleu_eval(pred_code_for_bleu)
 
         predict_tokens = tokenize_code(code)
-        if ref_repr == predict_repr:
+        # if ref_repr == predict_repr:
+        if predict_tokens == refer_tokens:
             cum_acc += 1
 
         ngram_weights = [0.25] * min(4, len(refer_tokens_for_bleu))
@@ -784,6 +803,17 @@ def decode_and_evaluate_ifttt(model, test_data):
     evaluate_ifttt_results(test_data_subset, decode_results)
 
     return decode_results
+
+
+def decode_and_evaluate_ifttt_by_split(model, test_data):
+    for split in ['ifff.test_data.omit_non_english.id', 'ifff.test_data.omit_unintelligible.id', 'ifff.test_data.gold.id']:
+        raw_ids = [int(i.strip()) for i in open(os.path.join(config.ifttt_test_split), split)]  # 'data/ifff.test_data.gold.id'
+        eids = [i for i, e in enumerate(test_data.examples) if e.raw_id in raw_ids]
+        test_data_subset = test_data.get_dataset_by_ids(eids, test_data.name + '.' + split)
+
+        from decoder import decode_ifttt_dataset
+        decode_results = decode_ifttt_dataset(model, test_data_subset, verbose=True)
+        evaluate_ifttt_results(test_data_subset, decode_results)
 
 
 if __name__ == '__main__':
