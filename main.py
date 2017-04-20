@@ -1,7 +1,7 @@
 import ast
 import re
 
-from tree import *
+from astnode import *
 
 p_elif = re.compile(r'^elif\s?')
 p_else = re.compile(r'^else\s?')
@@ -70,7 +70,7 @@ def get_tree(node):
     else:
         node_name = typename(node)
 
-    tree = Tree(node_name)
+    tree = ASTNode(node_name)
 
     if not isinstance(node, ast.AST):
         return tree
@@ -83,18 +83,18 @@ def get_tree(node):
 
             child = get_tree(field)
 
-            tree.children.append(Tree(field_name, child))
+            tree.children.append(ASTNode(field_name, child))
         elif isinstance(field, str):
             field_val = escape(field)
-            child = Tree(field_name, Tree(field_val))
+            child = ASTNode(field_name, ASTNode(field_val))
 
             tree.children.append(child)
         elif isinstance(field, int):
-            child = Tree(field_name, Tree(field))
+            child = ASTNode(field_name, ASTNode(field))
 
             tree.children.append(child)
         elif isinstance(field, list) and field:
-            child = Tree(field_name)
+            child = ASTNode(field_name)
 
             for n in field:
                 child.children.append(get_tree(n))
@@ -173,4 +173,5 @@ if __name__ == '__main__':
     # print parse('global _standard_context_processors')
 
     parse_django()
+
 
