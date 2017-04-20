@@ -24,6 +24,7 @@ def tokenize_for_bleu_eval(code):
 
     return tokens
 
+
 def evaluate(model, dataset, verbose=True):
     if verbose:
         logging.info('evaluating [%s] dataset, [%d] examples' % (dataset.name, dataset.count))
@@ -56,6 +57,7 @@ def evaluate(model, dataset, verbose=True):
     logging.info('exact_match_ratio = %f' % exact_match_ratio)
 
     return exact_match_ratio
+
 
 def evaluate_decode_results(dataset, decode_results, verbose=True):
     from lang.py.parse import tokenize_code, de_canonicalize_code
@@ -145,13 +147,18 @@ def evaluate_decode_results(dataset, decode_results, verbose=True):
         refer_tokens_for_bleu = tokenize_for_bleu_eval(ref_code_for_bleu)
         pred_tokens_for_bleu = tokenize_for_bleu_eval(pred_code_for_bleu)
 
+        # The if-chunk below is for debugging purpose, sometimes the reference cannot match with the prediction
+        # because of inconsistent quotes (e.g., single quotes in reference, double quotes in prediction).
+        # However most of these cases are solved by cannonicalizing the reference code using astor (parse the reference
+        # into AST, and regenerate the code. Use this regenerated one as the reference)
         weired = False
-        if refer_tokens_for_bleu == pred_tokens_for_bleu:
+        if refer_tokens_for_bleu == pred_tokens_for_bleu and refer_tokens != predict_tokens:
             # cum_acc += 1
-            pass
+            weired = True
         elif refer_tokens == predict_tokens:
             # weired!
-            weired = True
+            # weired = True
+            pass
 
         shorter = len(pred_tokens_for_bleu) < len(refer_tokens_for_bleu)
 
@@ -513,9 +520,8 @@ def analyze_decode_results(dataset, decode_results, verbose=True):
     return cum_bleu, cum_acc
 
 
-def evaluate_seq2seq_decode_results(dataset, seq2seq_decode_file, seq2seq_ref_file, verbose=True):
-    from lang.py.parse import tokenize_code, de_canonicalize_code
-    import ast
+def evaluate_seq2seq_decode_results(dataset, seq2seq_decode_file, seq2seq_ref_file, verbose=True, is_nbest=False):
+    from lang.py.parse import parse
 
     f_seq2seq_decode = open(seq2seq_decode_file)
     f_seq2seq_ref = open(seq2seq_ref_file)
@@ -527,18 +533,52 @@ def evaluate_seq2seq_decode_results(dataset, seq2seq_decode_file, seq2seq_ref_fi
     cum_acc = 0.0
     sm = SmoothingFunction()
 
+    decode_file_data = [l.strip() for l in f_seq2seq_decode.readlines()]
+    ref_code_data = [l.strip() for l in f_seq2seq_ref.readlines()]
+
+    if is_nbest:
+        for i in xrange(len(decode_file_data)):
+            d = decode_file_data[i].split(' ||| ')
+            decode_file_data[i] = (int(d[0]), d[1])
+
+    def is_well_formed_python_code(_hyp):
+        try:
+            _hyp = _hyp.replace('#NEWLINE#', '\n').replace('#INDENT#', '    ').replace(' #MERGE# ', '')
+            hyp_ast_tree = parse(_hyp)
+            return True
+        except:
+            return False
+
     for eid in range(dataset.count):
         example = dataset.examples[eid]
         cur_example_correct = False
 
-        code = f_seq2seq_decode.readline().strip()
-        ref_code = f_seq2seq_ref.readline().strip()
+        if is_nbest:
+            # find the best-scored well-formed code from the n-best list
+            n_best_list = filter(lambda x: x[0] == eid, decode_file_data)
+            code = top_scored_code = n_best_list[0][1]
+            for _, hyp in n_best_list:
+                if is_well_formed_python_code(hyp):
+                    code = hyp
+                    break
+
+            if top_scored_code != code:
+                print '*' * 60
+                print top_scored_code
+                print code
+                print '*' * 60
+
+            code = n_best_list[0][1]
+        else:
+            code = decode_file_data[eid]
+
+        code = code.replace('#NEWLINE#', '\n').replace('#INDENT#', '    ').replace(' #MERGE# ', '')
+        ref_code = ref_code_data[eid].replace('#NEWLINE#', '\n').replace('#INDENT#', '    ').replace(' #MERGE# ', '')
 
         if code == ref_code:
             cum_acc += 1
             cur_example_correct = True
 
-        code = code.replace('#NEWLINE#', '\n').replace('#INDENT#', '    ').replace(' #MERGE# ', '')
 
         if config.data_type == 'django':
             ref_code_for_bleu = example.meta_data['raw_code']

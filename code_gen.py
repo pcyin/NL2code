@@ -104,6 +104,7 @@ evaluate_parser.add_argument('-seq2tree_id_file', default='test.id.txt')
 evaluate_parser.add_argument('-seq2tree_rareword_map', default=None)
 evaluate_parser.add_argument('-seq2seq_decode_file')
 evaluate_parser.add_argument('-seq2seq_ref_file')
+evaluate_parser.add_argument('-is_nbest', default=False, action='store_true')
 
 # misc
 parser.add_argument('-ifttt_test_split', default='data/ifff.test_data.gold.id')
@@ -195,7 +196,7 @@ if __name__ == '__main__':
             evaluate_seq2tree_sample_file(config.seq2tree_sample_file, config.seq2tree_id_file, dataset)
         elif config.mode == 'seq2seq':
             from evaluation import evaluate_seq2seq_decode_results
-            evaluate_seq2seq_decode_results(dataset, config.seq2seq_decode_file, config.seq2seq_ref_file)
+            evaluate_seq2seq_decode_results(dataset, config.seq2seq_decode_file, config.seq2seq_ref_file, is_nbest=config.is_nbest)
         elif config.mode == 'analyze':
             from evaluation import analyze_decode_results
 
