@@ -1,16 +1,35 @@
-Neural Code Generation with Syntax Guidance
+# NL2code
 
-## Training 
+A syntactic neural model for parsing natural language to executable code [paper](https://arxiv.org/abs/1704.01696). 
+
+## Dataset and Trained Models
+
+Get serialized datasets and trained models from [here](https://drive.google.com/drive/folders/0B14lJ2VVvtmJWEQ5RlFjQUY2Vzg). Put `models/` and `data/` folders under the root directory of the project.
+
+## Usage
+
+To train new model
+
+```bash
+. train.sh [hs|django]
+```
+
+To use trained model for decoding test sets
+
+```bash
+. run_trained_model.sh [hs|django]
+```
+
+## Reference
 
 ```
-dataset="django.cleaned.dataset.freq5.par_info.refact.space_only.bin"
-commandline="-batch_size 10 -max_epoch 50 -valid_per_batch 4000 -save_per_batch 4000 -decode_max_time_step 100 -optimizer adam -rule_embed_dim 128 -node_embed_dim 64 -train_patience 7 -valid_metric accuracy -no_parent_hidden_state_feed -no_parent_action_feed"
-datatype="django"
-
-THEANO_FLAGS="mode=FAST_RUN,device=gpu0,floatX=float32,lib.cnmem=0.3" python -u code_gen.py \
-	-data_type ${datatype} \
-	-data ../data/${dataset} \
-	-output_dir ${output} \
-	${commandline} \
-	train
+@inproceedings{yin17acl,
+    title = {A Syntactic Neural Model for General-Purpose Code Generation},
+    author = {Pengcheng Yin and Graham Neubig},
+    booktitle = {The 55th Annual Meeting of the Association for Computational Linguistics (ACL)},
+    address = {Vancouver, Canada},
+    month = {July},
+    url = {https://arxiv.org/abs/1704.01696},
+    year = {2017}
+}
 ```
