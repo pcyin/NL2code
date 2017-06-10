@@ -20,6 +20,13 @@ To use trained model for decoding test sets
 . run_trained_model.sh [hs|django]
 ```
 
+## Dependencies
+
+* Theano
+* vprof
+* NLTK 3.2.1
+* astor 0.6
+
 ## Reference
 
 ```
