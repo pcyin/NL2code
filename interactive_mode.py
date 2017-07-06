@@ -72,7 +72,8 @@ parser.add_argument('-head_nt_constraint', dest='head_nt_constraint', action='st
 parser.add_argument('-no_head_nt_constraint', dest='head_nt_constraint', action='store_false')
 parser.set_defaults(head_nt_constraint=True)
 
-args = parser.parse_args()
+args = parser.parse_args(args=['-data_type', 'django', '-data', 'data/django.cleaned.dataset.freq5.par_info.refact.space_only.bin',
+                               '-model', 'models/model.django_word128_encoder256_rule128_node64.beam15.adam.simple_trans.no_unary_closure.8e39832.run3.best_acc.npz'])
 if args.data_type == 'hs':
     args.decode_max_time_step = 350
 
